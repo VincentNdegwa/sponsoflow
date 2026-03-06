@@ -12,6 +12,24 @@ use Livewire\Component;
 new #[Layout('layouts::app'), Title('Product Details')] class extends Component {
     
     public Product $product;
+    public array $batchPreview = [];
+    
+    public array $slotForm = [
+        'slot_date' => '',
+        'slot_time' => null,
+        'price' => '',
+        'notes' => null,
+    ];
+    
+    public array $batchForm = [
+        'start_date' => '',
+        'end_date' => '',
+        'frequency' => 'weekly',
+        'day_of_week' => 1,
+        'day_of_month' => 1,
+        'price_override' => null,
+        'notes_template' => null,
+    ];
 
     public function mount(Product $product): void
     {
@@ -19,19 +37,163 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
             abort(404);
         }
         $this->product = $product->load('requirements', 'slots');
+        $this->slotForm['price'] = $this->product->base_price;
+        $this->slotForm['slot_date'] = now()->addWeek()->format('Y-m-d');
+        
+        $this->batchForm['start_date'] = now()->addWeek()->format('Y-m-d');
+        $this->batchForm['end_date'] = now()->addMonths(3)->format('Y-m-d');
+    }
+
+    public function openBatchModal(): void
+    {
+        $this->batchForm['start_date'] = now()->addWeek()->format('Y-m-d');
+        $this->batchForm['end_date'] = now()->addMonths(3)->format('Y-m-d');
+        $this->generateBatchPreview();
+        $this->modal('batch-generate')->show();
+    }
+
+    public function updatedBatchForm(): void
+    {
+        $this->generateBatchPreview();
+    }
+
+    private function generateBatchPreview(): void
+    {
+        if (empty($this->batchForm['start_date']) || empty($this->batchForm['end_date'])) {
+            $this->batchPreview = [];
+            return;
+        }
+
+        try {
+            $startDate = \Carbon\Carbon::parse($this->batchForm['start_date']);
+            $endDate = \Carbon\Carbon::parse($this->batchForm['end_date']);
+            $frequency = $this->batchForm['frequency'];
+            
+            $dates = [];
+            $currentDate = $startDate->copy();
+            
+            while ($currentDate <= $endDate && count($dates) < 100) {
+                $shouldInclude = false;
+                
+                switch ($frequency) {
+                    case 'daily':
+                        $shouldInclude = true;
+                        break;
+                    case 'weekly':
+                        $shouldInclude = $currentDate->dayOfWeek === (int) $this->batchForm['day_of_week'];
+                        break;
+                    case 'monthly':
+                        $shouldInclude = $currentDate->day === (int) $this->batchForm['day_of_month'];
+                        break;
+                }
+                
+                if ($shouldInclude) {
+                    $existingSlot = $this->product->slots()
+                        ->whereDate('slot_date', $currentDate->format('Y-m-d'))
+                        ->exists();
+                        
+                    if (!$existingSlot) {
+                        $dates[] = $currentDate->format('M j, Y');
+                    }
+                }
+                
+                $currentDate->addDay();
+            }
+            
+            $this->batchPreview = $dates;
+        } catch (\Exception $e) {
+            $this->batchPreview = [];
+        }
+    }
+
+    public function generateBatchSlots(): void
+    {
+        $validated = $this->validate([
+            'batchForm.start_date' => 'required|date|after_or_equal:today',
+            'batchForm.end_date' => 'required|date|after:batchForm.start_date',
+            'batchForm.frequency' => 'required|in:daily,weekly,monthly',
+            'batchForm.day_of_week' => 'required_if:batchForm.frequency,weekly|integer|between:0,6',
+            'batchForm.day_of_month' => 'required_if:batchForm.frequency,monthly|integer|between:1,31',
+            'batchForm.price_override' => 'nullable|numeric|min:0',
+            'batchForm.notes_template' => 'nullable|string|max:500',
+        ]);
+
+        $startDate = \Carbon\Carbon::parse($validated['batchForm']['start_date']);
+        $endDate = \Carbon\Carbon::parse($validated['batchForm']['end_date']);
+        $frequency = $validated['batchForm']['frequency'];
+        
+        $slotsCreated = 0;
+        $currentDate = $startDate->copy();
+        
+        while ($currentDate <= $endDate && $slotsCreated < 100) {
+            $shouldInclude = false;
+            
+            switch ($frequency) {
+                case 'daily':
+                    $shouldInclude = true;
+                    break;
+                case 'weekly':
+                    $shouldInclude = $currentDate->dayOfWeek === (int) $validated['batchForm']['day_of_week'];
+                    break;
+                case 'monthly':
+                    $shouldInclude = $currentDate->day === (int) $validated['batchForm']['day_of_month'];
+                    break;
+            }
+            
+            if ($shouldInclude) {
+                $existingSlot = $this->product->slots()
+                    ->whereDate('slot_date', $currentDate->format('Y-m-d'))
+                    ->exists();
+                    
+                if (!$existingSlot) {
+                    $this->product->slots()->create([
+                        'workspace_id' => Auth::user()->currentWorkspace()->id,
+                        'slot_date' => $currentDate->format('Y-m-d'),
+                        'price' => $validated['batchForm']['price_override'] ?: $this->product->base_price,
+                        'status' => SlotStatus::Available,
+                        'notes' => $validated['batchForm']['notes_template'] ?: "Batch generated slot",
+                    ]);
+                    $slotsCreated++;
+                }
+            }
+            
+            $currentDate->addDay();
+        }
+
+        $this->dispatch('success', "Successfully generated {$slotsCreated} slots!");
+        $this->modal('batch-generate')->close();
+        $this->reset('batchForm', 'batchPreview');
+        $this->product->refresh();
+    }
+
+    public function openSlotModal(): void
+    {
+        $this->slotForm['price'] = $this->product->base_price;
+        $this->slotForm['slot_date'] = now()->addWeek()->format('Y-m-d');
+        $this->modal('create-slot')->show();
     }
 
     public function createSlot(): void
     {
-        $slot = $this->product->slots()->create([
+        $validated = $this->validate([
+            'slotForm.slot_date' => 'required|date|after:today',
+            'slotForm.slot_time' => 'nullable|date_format:H:i',
+            'slotForm.price' => 'required|numeric|min:0',
+            'slotForm.notes' => 'nullable|string|max:500',
+        ]);
+        
+        $this->product->slots()->create([
             'workspace_id' => Auth::user()->currentWorkspace()->id,
-            'slot_date' => now()->addWeek(),
-            'price' => $this->product->base_price,
+            'slot_date' => $validated['slotForm']['slot_date'],
+            'slot_time' => $validated['slotForm']['slot_time'],
+            'price' => $validated['slotForm']['price'],
             'status' => SlotStatus::Available,
-            'notes' => 'Auto-generated slot',
+            'notes' => $validated['slotForm']['notes'],
         ]);
 
-        $this->dispatch('slot-created');
+        $this->dispatch('success', 'Slot created successfully!');
+        $this->modal('create-slot')->close();
+        $this->reset('slotForm');
         $this->product->refresh();
     }
 
@@ -66,8 +228,8 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
     }
 }; ?>
 
-<div >
-        <div class="mb-8 flex items-start justify-between">
+<div>
+    <div class="mb-8 flex items-start justify-between">
             <div>
                 <div class="mb-2 flex items-center gap-3">
                     <flux:heading size="xl">{{ $product->name }}</flux:heading>
@@ -79,8 +241,11 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
             </div>
             
             <div class="flex gap-2">
-                <flux:button wire:click="createSlot" variant="primary" icon="plus">
-                    Add Slot
+                <flux:button wire:click="openBatchModal" variant="filled" icon="squares-plus" class="bg-blue-600 hover:bg-blue-700">
+                    Batch Generate
+                </flux:button>
+                <flux:button wire:click="openSlotModal" variant="primary" icon="plus">
+                    Add Single Slot
                 </flux:button>
                 <flux:button :href="route('products.index')" variant="ghost">
                     Back to Products
@@ -179,27 +344,60 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
 
             <div class="space-y-6">
                 <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                    <flux:heading size="lg" class="mb-4">Statistics</flux:heading>
+                    <flux:heading size="lg" class="mb-4">Inventory Health</flux:heading>
                     
-                    <div class="space-y-4">
+                    @php
+                        $totalSlots = $product->slots->count();
+                        $availableCount = $this->availableSlots->count();
+                        $bookedCount = $this->bookedSlots->count();
+                        $fillRate = $totalSlots > 0 ? round(($bookedCount / $totalSlots) * 100) : 0;
+                        $projectedRevenue = $this->bookedSlots->sum('price');
+                        $availableRevenue = $this->availableSlots->sum('price');
+                    @endphp
+                    
+                    <div class="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
                         <div class="flex items-center justify-between">
-                            <flux:text>Total Slots</flux:text>
-                            <flux:text class="font-semibold">{{ $product->slots->count() }}</flux:text>
+                            <flux:text class="font-medium text-blue-800 dark:text-blue-200">Fill Rate</flux:text>
+                            <flux:heading size="lg" class="text-blue-900 dark:text-blue-100">{{ $fillRate }}%</flux:heading>
+                        </div>
+                        <div class="mt-2 h-2 rounded-full bg-blue-200 dark:bg-blue-800">
+                            <div class="h-2 rounded-full bg-blue-600" style="width: {{ $fillRate }}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="text-center rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+                            <flux:text class="font-semibold text-green-900 dark:text-green-100">Available</flux:text>
+                            <flux:heading size="xl" class="text-green-800 dark:text-green-200">{{ $availableCount }}</flux:heading>
+                            <flux:text size="sm" class="text-green-600 dark:text-green-400">${{ number_format($availableRevenue, 0) }} potential</flux:text>
                         </div>
                         
-                        <div class="flex items-center justify-between">
-                            <flux:text>Available</flux:text>
-                            <flux:text class="font-semibold text-green-600">{{ $this->availableSlots->count() }}</flux:text>
+                        <div class="text-center rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                            <flux:text class="font-semibold text-blue-900 dark:text-blue-100">Booked</flux:text>
+                            <flux:heading size="xl" class="text-blue-800 dark:text-blue-200">{{ $bookedCount }}</flux:heading>
+                            <flux:text size="sm" class="text-blue-600 dark:text-blue-400">${{ number_format($projectedRevenue, 0) }} confirmed</flux:text>
                         </div>
-                        
+                    </div>
+                    
+                    <div class="mt-6 space-y-3 border-t pt-4">
                         <div class="flex items-center justify-between">
-                            <flux:text>Booked</flux:text>
-                            <flux:text class="font-semibold text-blue-600">{{ $this->bookedSlots->count() }}</flux:text>
+                            <flux:text>Total Inventory</flux:text>
+                            <flux:text class="font-semibold">{{ $totalSlots }} slots</flux:text>
                         </div>
                         
                         <div class="flex items-center justify-between">
                             <flux:text>Requirements</flux:text>
-                            <flux:text class="font-semibold">{{ $product->requirements->count() }}</flux:text>
+                            <flux:text class="font-semibold">{{ $product->requirements->count() }} fields</flux:text>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <flux:text>Avg. Price</flux:text>
+                            <flux:text class="font-semibold">${{ $totalSlots > 0 ? number_format($product->slots->avg('price'), 2) : '0.00' }}</flux:text>
+                        </div>
+                        
+                        <div class="flex items-center justify-between border-t pt-3">
+                            <flux:text class="font-medium">Total Revenue Potential</flux:text>
+                            <flux:heading size="lg" class="text-green-600">${{ number_format($projectedRevenue + $availableRevenue, 0) }}</flux:heading>
                         </div>
                     </div>
                 </div>
@@ -227,4 +425,13 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
                 @endif
             </div>
         </div>
+    <x-products.modals.create-slot 
+        :product="$product" 
+    />
+    
+    <x-products.modals.create-bulk-slots 
+        :product="$product"
+        :batchForm="$batchForm"
+        :batchPreview="$batchPreview"
+    />
 </div>

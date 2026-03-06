@@ -6,17 +6,32 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 new #[Layout('layouts::app'), Title('Products')] class extends Component {
-    
+    use WithPagination;
+
+    public $sortBy = 'created_at';
+    public $sortDirection = 'desc';
+
+    public function sort($column)
+    {
+        if ($this->sortBy === $column) {
+            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->sortBy = $column;
+            $this->sortDirection = 'asc';
+        }
+    }
+
     #[Computed]
     public function products()
     {
         return Auth::user()->currentWorkspace()
             ->products()
-            ->withCount('requirements', 'availableSlots')
-            ->latest()
-            ->get();
+            ->withCount(['requirements', 'availableSlots'])
+            ->tap(fn ($query) => $this->sortBy ? $query->orderBy($this->sortBy, $this->sortDirection) : $query)
+            ->paginate(10);
     }
 
     public function deleteProduct(Product $product): void
@@ -28,75 +43,86 @@ new #[Layout('layouts::app'), Title('Products')] class extends Component {
 }; ?>
 
 <div>
-        <div class="mb-8 flex items-center justify-between">
-            <div>
-                <flux:heading size="xl">Products</flux:heading>
-                <flux:subheading>Build and manage your sponsorship offerings</flux:subheading>
-            </div>
-            
-            <flux:button :href="route('products.create')" variant="primary" icon="plus">
-                Create Product
+    <div class="mb-8 flex items-center justify-between">
+        <div>
+            <flux:heading size="xl">Products</flux:heading>
+            <flux:subheading>Build and manage your sponsorship offerings</flux:subheading>
+        </div>
+        
+        <flux:button :href="route('products.create')" variant="primary" icon="plus">
+            Create Product
+        </flux:button>
+    </div>
+
+    @if($this->products->count() > 0)
+        <flux:table :paginate="$this->products">
+            <flux:table.columns>
+                <flux:table.column sortable :sorted="$sortBy === 'name'" :direction="$sortDirection" wire:click="sort('name')">Name</flux:table.column>
+                <flux:table.column sortable :sorted="$sortBy === 'is_active'" :direction="$sortDirection" wire:click="sort('is_active')">Status</flux:table.column>
+                <flux:table.column sortable :sorted="$sortBy === 'base_price'" :direction="$sortDirection" wire:click="sort('base_price')">Price</flux:table.column>
+                <flux:table.column>Stats</flux:table.column>
+                <flux:table.column></flux:table.column>
+            </flux:table.columns>
+
+            <flux:table.rows>
+                @foreach ($this->products as $product)
+                    <flux:table.row :key="$product->id">
+                        <flux:table.cell>
+                            <div class="flex flex-col">
+                                <span class="font-medium text-zinc-800 dark:text-white">{{ $product->name }}</span>
+                                @if($product->description)
+                                    <span class="text-xs text-zinc-500 line-clamp-1">{{ Str::limit($product->description, 60) }}</span>
+                                @endif
+                            </div>
+                        </flux:table.cell>
+
+                        <flux:table.cell>
+                            <flux:badge size="sm" :color="$product->is_active ? 'lime' : 'zinc'" inset="top bottom">
+                                {{ $product->is_active ? 'Active' : 'Inactive' }}
+                            </flux:badge>
+                        </flux:table.cell>
+
+                        <flux:table.cell variant="strong">
+                            ${{ number_format($product->base_price, 2) }}
+                        </flux:table.cell>
+
+                        <flux:table.cell>
+                            <div class="flex gap-3 text-xs text-zinc-500">
+                                <span title="Requirements" class="flex items-center gap-1">
+                                    <flux:icon.document-text variant="micro" /> {{ $product->requirements_count }}
+                                </span>
+                                <span title="Available Slots" class="flex items-center gap-1">
+                                    <flux:icon.calendar variant="micro" /> {{ $product->available_slots_count }}
+                                </span>
+                            </div>
+                        </flux:table.cell>
+
+                        <flux:table.cell>
+                            <div class="flex justify-end gap-2">                                
+                                <flux:dropdown>
+                                    <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
+                                    <flux:menu>
+                                        <flux:menu.item :href="route('products.show', $product)" icon="eye">View</flux:menu.item>
+                                        <flux:menu.item :href="route('products.edit', $product)" icon="pencil">Edit</flux:menu.item>
+                                        <flux:menu.item wire:click="deleteProduct({{ $product->id }})" variant="danger" icon="trash">Delete</flux:menu.item>
+                                    </flux:menu>
+                                </flux:dropdown>
+                            </div>
+                        </flux:table.cell>
+                    </flux:table.row>
+                @endforeach
+            </flux:table.rows>
+        </flux:table>
+    @else
+        <div class="rounded-lg border-2 border-dashed border-zinc-300 p-12 text-center dark:border-zinc-600">
+            <flux:icon.cube class="mx-auto h-12 w-12 text-zinc-400" />
+            <flux:heading size="lg" class="mt-4">No products yet</flux:heading>
+            <flux:text class="mt-2 text-zinc-600 dark:text-zinc-400">
+                Create your first product to start accepting sponsorships
+            </flux:text>
+            <flux:button :href="route('products.create')" variant="primary" class="mt-4" icon="plus">
+                Create Your First Product
             </flux:button>
         </div>
-
-        @if($this->products->count() > 0)
-            <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                @foreach($this->products as $product)
-                    <div class="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800">
-                        <div class="p-6">
-                            <div class="mb-4 flex items-start justify-between">
-                                <div>
-                                    <flux:heading size="lg" class="mb-1">{{ $product->name }}</flux:heading>
-                                    <flux:badge variant="{{ $product->is_active ? 'lime' : 'zinc' }}">
-                                        {{ $product->is_active ? 'Active' : 'Inactive' }}
-                                    </flux:badge>
-                                </div>
-                                
-                                <div class="text-right">
-                                    <flux:text class="text-sm text-zinc-500">Base Price</flux:text>
-                                    <flux:heading size="lg">${{ number_format($product->base_price, 2) }}</flux:heading>
-                                </div>
-                            </div>
-
-                            @if($product->description)
-                                <flux:text size="sm" class="mb-4 text-zinc-600 dark:text-zinc-400">
-                                    {{ Str::limit($product->description, 100) }}
-                                </flux:text>
-                            @endif
-
-                            <div class="mb-4 flex items-center gap-4 text-sm text-zinc-500">
-                                <div class="flex items-center gap-1">
-                                    <flux:icon.document-text variant="micro" />
-                                    {{ $product->requirements_count }} requirements
-                                </div>
-                                <div class="flex items-center gap-1">
-                                    <flux:icon.calendar variant="micro" />
-                                    {{ $product->available_slots_count }} slots
-                                </div>
-                            </div>
-
-                            <div class="flex gap-2">
-                                <flux:button :href="route('products.show', $product)" variant="ghost" size="sm" class="flex-1">
-                                    View Details
-                                </flux:button>
-                                <flux:button wire:click="deleteProduct({{ $product->id }})" variant="danger" size="sm">
-                                    <flux:icon.trash variant="micro" />
-                                </flux:button>
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        @else
-            <div class="rounded-lg border-2 border-dashed border-zinc-300 p-12 text-center dark:border-zinc-600">
-                <flux:icon.cube class="mx-auto h-12 w-12 text-zinc-400" />
-                <flux:heading size="lg" class="mt-4">No products yet</flux:heading>
-                <flux:text class="mt-2 text-zinc-600 dark:text-zinc-400">
-                    Create your first product to start accepting sponsorships
-                </flux:text>
-                <flux:button :href="route('products.create')" variant="primary" class="mt-4" icon="plus">
-                    Create Your First Product
-                </flux:button>
-            </div>
-        @endif
+    @endif
 </div>
