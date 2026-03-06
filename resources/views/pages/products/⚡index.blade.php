@@ -13,6 +13,9 @@ new #[Layout('layouts::app'), Title('Products')] class extends Component {
 
     public $sortBy = 'created_at';
     public $sortDirection = 'desc';
+    public bool $showPublicModal = false;
+    public ?Product $selectedProduct = null;
+    public bool $targetPublicState = false;
 
     public function sort($column)
     {
@@ -40,6 +43,28 @@ new #[Layout('layouts::app'), Title('Products')] class extends Component {
         
         $this->dispatch('product-deleted');
     }
+
+    public function confirmPublicToggle(Product $product): void
+    {
+        $this->selectedProduct = $product;
+        $this->targetPublicState = !$product->is_public;
+        $this->showPublicModal = true;
+    }
+
+    public function toggleProductPublic(): void
+    {
+        if ($this->selectedProduct) {
+            $this->selectedProduct->update([
+                'is_public' => $this->targetPublicState
+            ]);
+            
+            $message = $this->targetPublicState ? 'Product is now public' : 'Product is now private';
+            $this->dispatch('success', $message);
+        }
+        
+        $this->showPublicModal = false;
+        $this->selectedProduct = null;
+    }
 }; ?>
 
 <div>
@@ -60,6 +85,7 @@ new #[Layout('layouts::app'), Title('Products')] class extends Component {
                 <flux:table.column sortable :sorted="$sortBy === 'name'" :direction="$sortDirection" wire:click="sort('name')">Name</flux:table.column>
                 <flux:table.column sortable :sorted="$sortBy === 'is_active'" :direction="$sortDirection" wire:click="sort('is_active')">Status</flux:table.column>
                 <flux:table.column sortable :sorted="$sortBy === 'base_price'" :direction="$sortDirection" wire:click="sort('base_price')">Price</flux:table.column>
+                <flux:table.column>Visibility</flux:table.column>
                 <flux:table.column>Stats</flux:table.column>
                 <flux:table.column></flux:table.column>
             </flux:table.columns>
@@ -87,6 +113,12 @@ new #[Layout('layouts::app'), Title('Products')] class extends Component {
                         </flux:table.cell>
 
                         <flux:table.cell>
+                            <flux:badge size="sm" :color="$product->is_public ? 'blue' : 'zinc'" inset="top bottom">
+                                {{ $product->is_public ? 'Public' : 'Private' }}
+                            </flux:badge>
+                        </flux:table.cell>
+
+                        <flux:table.cell>
                             <div class="flex gap-3 text-xs text-zinc-500">
                                 <span title="Requirements" class="flex items-center gap-1">
                                     <flux:icon.document-text variant="micro" /> {{ $product->requirements_count }}
@@ -104,6 +136,9 @@ new #[Layout('layouts::app'), Title('Products')] class extends Component {
                                     <flux:menu>
                                         <flux:menu.item :href="route('products.show', $product)" icon="eye">View</flux:menu.item>
                                         <flux:menu.item :href="route('products.edit', $product)" icon="pencil">Edit</flux:menu.item>
+                                        <flux:menu.item wire:click="confirmPublicToggle({{ $product->id }})" icon="{{ $product->is_public ? 'eye-slash' : 'eye' }}">
+                                            Make {{ $product->is_public ? 'Private' : 'Public' }}
+                                        </flux:menu.item>
                                         <flux:menu.item wire:click="deleteProduct({{ $product->id }})" variant="danger" icon="trash">Delete</flux:menu.item>
                                     </flux:menu>
                                 </flux:dropdown>
@@ -125,4 +160,29 @@ new #[Layout('layouts::app'), Title('Products')] class extends Component {
             </flux:button>
         </div>
     @endif
+
+    <flux:modal wire:model.self="showPublicModal" class="max-w-md">
+    <div class="space-y-6">
+        <div>
+            <flux:heading size="lg">{{ $targetPublicState ? 'Make Product Public' : 'Make Product Private' }}</flux:heading>
+            <flux:text class="mt-2">
+                @if($targetPublicState)
+                    This product will be visible on your public storefront and available for guest bookings.
+                @else
+                    This product will be hidden from your public storefront and only visible in your dashboard.
+                @endif
+            </flux:text>
+        </div>
+
+        <div class="flex gap-3">
+            <flux:spacer />
+            <flux:button wire:click="$set('showPublicModal', false)" variant="ghost">
+                Cancel
+            </flux:button>
+            <flux:button wire:click="toggleProductPublic" variant="primary">
+                {{ $targetPublicState ? 'Make Public' : 'Make Private' }}
+            </flux:button>
+        </div>
+    </div>
+</flux:modal>
 </div>

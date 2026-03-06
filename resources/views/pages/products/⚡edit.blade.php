@@ -15,6 +15,7 @@ new #[Layout('layouts::app'), Title('Edit Product')] class extends Component {
     public string $base_price = '';
     public string $duration_minutes = '';
     public bool $is_active = true;
+    public bool $is_public = false;
 
     public function mount(Product $product): void
     {
@@ -29,6 +30,7 @@ new #[Layout('layouts::app'), Title('Edit Product')] class extends Component {
         $this->base_price = (string) $product->base_price;
         $this->duration_minutes = (string) ($product->duration_minutes ?? '');
         $this->is_active = $product->is_active;
+        $this->is_public = $product->is_public ?? false;
     }
 
     public function updateProduct(): void
@@ -40,6 +42,7 @@ new #[Layout('layouts::app'), Title('Edit Product')] class extends Component {
             'base_price' => 'required|numeric|min:0',
             'duration_minutes' => 'required|integer|min:1',
             'is_active' => 'boolean',
+            'is_public' => 'boolean',
         ]);
 
         $this->product->update($validated);
@@ -92,6 +95,16 @@ new #[Layout('layouts::app'), Title('Edit Product')] class extends Component {
                     <div class="flex items-end">
                         <flux:checkbox wire:model="is_active" label="Active" />
                     </div>
+                </div>
+
+                <div class="flex items-center justify-between py-4 rounded-lg mt-6">
+                    <div class="flex-1">
+                        <flux:text class="font-medium">Make Product Public</flux:text>
+                        <flux:text size="sm" class="text-zinc-600 dark:text-zinc-400">
+                            Allow visitors to view and book this product from your public storefront
+                        </flux:text>
+                    </div>
+                    <flux:switch wire:model="is_public" />
                 </div>
             </div>
 

@@ -25,6 +25,9 @@ class Slot extends Model
         'proof_url',
         'proof_submitted_at',
         'completed_at',
+        'reserved_at',
+        'reserved_by',
+        'stripe_session_id',
     ];
 
     protected function casts(): array
@@ -38,6 +41,7 @@ class Slot extends Model
             'brand_assets' => 'array',
             'proof_submitted_at' => 'datetime',
             'completed_at' => 'datetime',
+            'reserved_at' => 'datetime',
         ];
     }
 
@@ -74,6 +78,49 @@ class Slot extends Model
     public function scopeForDate($query, $date)
     {
         return $query->whereDate('slot_date', $date);
+    }
+
+    public function scopeNotReserved($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('reserved_at')
+                ->orWhere('reserved_at', '<', now()->subMinutes(15));
+        });
+    }
+
+    public function scopeExpiredReservations($query)
+    {
+        return $query->whereNotNull('reserved_at')
+            ->where('reserved_at', '<', now()->subMinutes(15))
+            ->where('status', SlotStatus::Available);
+    }
+
+    public function booking()
+    {
+        return $this->hasOne(Booking::class);
+    }
+
+    public function isReserved(): bool
+    {
+        return $this->reserved_at && $this->reserved_at->isAfter(now()->subMinutes(15));
+    }
+
+    public function reserveFor(string $sessionId, ?string $email = null): void
+    {
+        $this->update([
+            'reserved_at' => now(),
+            'reserved_by' => $email ?: $sessionId,
+            'stripe_session_id' => $sessionId,
+        ]);
+    }
+
+    public function clearReservation(): void
+    {
+        $this->update([
+            'reserved_at' => null,
+            'reserved_by' => null,
+            'stripe_session_id' => null,
+        ]);
     }
 
     public function canTransitionTo(SlotStatus $status): bool

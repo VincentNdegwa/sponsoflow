@@ -16,6 +16,8 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
     public Product $product;
     public bool $showSlotModal = false;
     public bool $showBatchModal = false;
+    public bool $showPublicModal = false;
+    public bool $targetPublicState = false;
     public array $batchPreview = [];
     
     public array $slotForm = [
@@ -210,6 +212,24 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
         $this->dispatch('slot-deleted');
     }
 
+    public function confirmPublicToggle(): void
+    {
+        $this->targetPublicState = !$this->product->is_public;
+        $this->showPublicModal = true;
+    }
+
+    public function toggleProductPublic(): void
+    {
+        $this->product->update([
+            'is_public' => $this->targetPublicState
+        ]);
+        
+        $message = $this->targetPublicState ? 'Product is now public' : 'Product is now private';
+        $this->dispatch('success', $message);
+        
+        $this->showPublicModal = false;
+    }
+
     #[Computed]
     public function availableSlots()
     {
@@ -237,11 +257,17 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
                 <flux:badge variant="{{ $product->is_active ? 'lime' : 'zinc' }}">
                     {{ $product->is_active ? 'Active' : 'Inactive' }}
                 </flux:badge>
+                <flux:badge variant="{{ $product->is_public ? 'blue' : 'zinc' }}">
+                    {{ $product->is_public ? 'Public' : 'Private' }}
+                </flux:badge>
             </div>
             <flux:subheading>{{ $product->description }}</flux:subheading>
         </div>
         
         <div class="flex gap-2">
+            <flux:button wire:click="confirmPublicToggle" variant="{{ $product->is_public ? 'ghost' : 'filled' }}" icon="{{ $product->is_public ? 'eye-slash' : 'eye' }}">
+                Make {{ $product->is_public ? 'Private' : 'Public' }}
+            </flux:button>
             <flux:button wire:click="openBatchModal" variant="filled" icon="squares-plus" class="bg-blue-600 hover:bg-blue-700">
                 Batch Generate
             </flux:button>
@@ -281,6 +307,11 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
                     <div>
                         <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Status</flux:text>
                         <flux:text class="mt-1">{{ $product->is_active ? 'Active' : 'Inactive' }}</flux:text>
+                    </div>
+                    
+                    <div>
+                        <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Visibility</flux:text>
+                        <flux:text class="mt-1">{{ $product->is_public ? 'Public' : 'Private' }}</flux:text>
                     </div>
                 </div>
             </div>
@@ -441,4 +472,29 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
 
     <x-products.modals.create-slot :product="$product" />
     <x-products.modals.create-bulk-slots :product="$product" :batchForm="$batchForm" :batchPreview="$batchPreview" />
+
+    <flux:modal wire:model.self="showPublicModal" class="max-w-md">
+        <div class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ $targetPublicState ? 'Make Product Public' : 'Make Product Private' }}</flux:heading>
+                <flux:text class="mt-2">
+                    @if($targetPublicState)
+                        This product will be visible on your public storefront and available for guest bookings.
+                    @else
+                        This product will be hidden from your public storefront and only visible in your dashboard.
+                    @endif
+                </flux:text>
+            </div>
+
+            <div class="flex gap-3">
+                <flux:spacer />
+                <flux:button wire:click="$set('showPublicModal', false)" variant="ghost">
+                    Cancel
+                </flux:button>
+                <flux:button wire:click="toggleProductPublic" variant="primary">
+                    {{ $targetPublicState ? 'Make Public' : 'Make Private' }}
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </div>

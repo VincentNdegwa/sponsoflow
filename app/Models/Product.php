@@ -13,13 +13,16 @@ class Product extends Model
 
     protected $fillable = [
         'workspace_id',
-        'name', 
+        'name',
         'description',
         'type',
         'base_price',
         'duration_minutes',
         'custom_attributes',
         'is_active',
+        'is_public',
+        'featured_order',
+        'sold_count',
     ];
 
     protected function casts(): array
@@ -28,6 +31,7 @@ class Product extends Model
             'base_price' => 'decimal:2',
             'custom_attributes' => 'array',
             'is_active' => 'boolean',
+            'is_public' => 'boolean',
         ];
     }
 
@@ -51,9 +55,37 @@ class Product extends Model
         return $this->hasMany(Slot::class)->where('status', 'available');
     }
 
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(Booking::class);
+    }
+
+    public function publicAvailableSlots(): HasMany
+    {
+        return $this->availableSlots()
+            ->whereDate('slot_date', '>=', now())
+            ->whereNull('reserved_at')
+            ->orWhere('reserved_at', '<', now()->subMinutes(15));
+    }
+
+    public function incrementSoldCount(): void
+    {
+        $this->increment('sold_count');
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
+    }
+
+    public function scopePublic($query)
+    {
+        return $query->where('is_public', true)->where('is_active', true);
+    }
+
+    public function scopeFeatured($query)
+    {
+        return $query->orderBy('featured_order')->orderBy('name');
     }
 
     public function scopeForWorkspace($query, Workspace $workspace)

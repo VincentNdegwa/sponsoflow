@@ -6,18 +6,22 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
-use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laratrust\Contracts\LaratrustUser;
 use Laratrust\Traits\HasRolesAndPermissions;
+use Laravel\Fortify\TwoFactorAuthenticatable;
 
 class User extends Authenticatable implements LaratrustUser
 {
-    use HasFactory, Notifiable, TwoFactorAuthenticatable, HasRolesAndPermissions;
+    use HasFactory, HasRolesAndPermissions, Notifiable, TwoFactorAuthenticatable;
 
     protected $fillable = [
         'name',
         'email',
         'password',
+        'public_slug',
+        'public_bio',
+        'profile_image',
+        'is_public_profile',
     ];
 
     protected $hidden = [
@@ -32,6 +36,7 @@ class User extends Authenticatable implements LaratrustUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_public_profile' => 'boolean',
         ];
     }
 
@@ -47,7 +52,7 @@ class User extends Authenticatable implements LaratrustUser
     public function workspaces()
     {
         return $this->belongsToMany(Workspace::class, 'role_user', 'user_id', 'team_id')
-                    ->withPivot('role_id');
+            ->withPivot('role_id');
     }
 
     public function roleInWorkspace(Workspace $workspace)
@@ -68,5 +73,59 @@ class User extends Authenticatable implements LaratrustUser
     public function currentWorkspace(): ?Workspace
     {
         return $this->workspaces()->first();
+    }
+
+    public function publicProducts()
+    {
+        return $this->hasMany(Product::class, 'workspace_id', 'id')
+            ->where('is_public', true)
+            ->where('is_active', true)
+            ->orderBy('featured_order')
+            ->orderBy('name');
+    }
+
+    public function publicSlots()
+    {
+        return $this->hasManyThrough(Slot::class, Product::class, 'workspace_id', 'product_id')
+            ->whereHas('product', function ($q) {
+                $q->where('is_public', true)->where('is_active', true);
+            })
+            ->where('status', \App\Enums\SlotStatus::Available)
+            ->whereDate('slot_date', '>=', now());
+    }
+
+    public function bookings()
+    {
+        return $this->hasMany(Booking::class, 'creator_id');
+    }
+
+    public function brandBookings()
+    {
+        return $this->hasMany(Booking::class, 'brand_user_id');
+    }
+
+    public function generateSlug(): string
+    {
+        if ($this->public_slug) {
+            return $this->public_slug;
+        }
+
+        $baseSlug = Str::slug($this->name);
+        $slug = $baseSlug;
+        $counter = 1;
+
+        while (static::where('public_slug', $slug)->where('id', '!=', $this->id)->exists()) {
+            $slug = $baseSlug.'-'.$counter;
+            $counter++;
+        }
+
+        $this->update(['public_slug' => $slug]);
+
+        return $slug;
+    }
+
+    public function getPublicUrlAttribute(): string
+    {
+        return route('creator.show', $this->public_slug ?: $this->generateSlug());
     }
 }

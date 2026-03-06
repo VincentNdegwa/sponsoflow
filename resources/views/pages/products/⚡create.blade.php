@@ -14,6 +14,7 @@ new #[Layout('layouts::app'), Title('Create Product')] class extends Component {
     public string $base_price = '';
     public string $duration_minutes = '';
     public bool $is_active = true;
+    public bool $is_public = false;
 
     public array $requirements = [];
 
@@ -31,6 +32,7 @@ new #[Layout('layouts::app'), Title('Create Product')] class extends Component {
             'base_price' => 'required|numeric|min:0',
             'duration_minutes' => 'required|integer|min:1',
             'is_active' => 'boolean',
+            'is_public' => 'boolean',
             'requirements.*.name' => 'required|string|max:255',
             'requirements.*.description' => 'nullable|string',
             'requirements.*.type' => 'required|string|in:text,file,url,date,number',
@@ -47,6 +49,7 @@ new #[Layout('layouts::app'), Title('Create Product')] class extends Component {
                 'base_price' => $validated['base_price'],
                 'duration_minutes' => $validated['duration_minutes'],
                 'is_active' => $validated['is_active'],
+                'is_public' => $validated['is_public'],
             ]);
 
         foreach ($this->requirements as $index => $requirement) {
@@ -117,6 +120,16 @@ new #[Layout('layouts::app'), Title('Create Product')] class extends Component {
                 <div class="flex items-end">
                     <flux:checkbox wire:model="is_active" label="Active" checked />
                 </div>
+            </div>
+
+            <div class="flex items-center justify-between py-4 border rounded-lg border-zinc-200 dark:border-zinc-700 px-4 bg-zinc-50 dark:bg-zinc-800/50 mt-6">
+                <div class="flex-1">
+                    <flux:text class="font-medium">Make Product Public</flux:text>
+                    <flux:text size="sm" class="text-zinc-600 dark:text-zinc-400">
+                        Allow visitors to view and book this product from your public storefront
+                    </flux:text>
+                </div>
+                <flux:switch wire:model="is_public" />
             </div>
         </div>
 
