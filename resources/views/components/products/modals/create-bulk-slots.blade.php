@@ -4,7 +4,7 @@
     'batchPreview' => [],
 ])
 
-<flux:modal wire:model.self="showBatchModal" name="batch-generate" class="md:w-[42rem]">
+<flux:modal wire:model.self="showBatchModal" flyout class="md:w-[42rem]">
     <div class="space-y-6">
         <div>
             <flux:heading size="lg">Batch Generate Slots</flux:heading>
@@ -101,9 +101,9 @@
 
             <div class="flex gap-2">
                 <flux:spacer />
-                <flux:modal.close>
-                    <flux:button variant="ghost">Cancel</flux:button>
-                </flux:modal.close>
+                <flux:button variant="ghost" @click="$wire.set('showBatchModal', false)" type="button">
+                    Cancel
+                </flux:button>
                 <flux:button variant="primary" type="submit" wire:loading.attr="disabled" wire:loading.class="opacity-75"
                     :disabled="!$batchPreview || count($batchPreview) === 0">
                     <span wire:loading.remove>Generate {{ count($batchPreview ?? []) }} Slots</span>

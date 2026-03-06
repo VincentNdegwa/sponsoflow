@@ -8,10 +8,14 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 new #[Layout('layouts::app'), Title('Product Details')] class extends Component {
-    
+    use WithPagination;
+
     public Product $product;
+    public bool $showSlotModal = false;
+    public bool $showBatchModal = false;
     public array $batchPreview = [];
     
     public array $slotForm = [
@@ -36,7 +40,7 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
         if ($product->workspace_id !== Auth::user()->currentWorkspace()->id) {
             abort(404);
         }
-        $this->product = $product->load('requirements', 'slots');
+        $this->product = $product->load('requirements');
         $this->slotForm['price'] = $this->product->base_price;
         $this->slotForm['slot_date'] = now()->addWeek()->format('Y-m-d');
         
@@ -49,7 +53,7 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
         $this->batchForm['start_date'] = now()->addWeek()->format('Y-m-d');
         $this->batchForm['end_date'] = now()->addMonths(3)->format('Y-m-d');
         $this->generateBatchPreview();
-        $this->modal('batch-generate')->show();
+        $this->showBatchModal = true;
     }
 
     public function updatedBatchForm(): void
@@ -161,16 +165,15 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
         }
 
         $this->dispatch('success', "Successfully generated {$slotsCreated} slots!");
-        $this->modal('batch-generate')->close();
+        $this->showBatchModal = false;
         $this->reset('batchForm', 'batchPreview');
-        $this->product->refresh();
     }
 
     public function openSlotModal(): void
     {
         $this->slotForm['price'] = $this->product->base_price;
         $this->slotForm['slot_date'] = now()->addWeek()->format('Y-m-d');
-        $this->modal('create-slot')->show();
+        $this->showSlotModal = true;
     }
 
     public function createSlot(): void
@@ -192,9 +195,8 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
         ]);
 
         $this->dispatch('success', 'Slot created successfully!');
-        $this->modal('create-slot')->close();
+        $this->showSlotModal = false;
         $this->reset('slotForm');
-        $this->product->refresh();
     }
 
     public function deleteSlot(Slot $slot): void
@@ -206,7 +208,6 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
 
         $slot->delete();
         $this->dispatch('slot-deleted');
-        $this->product->refresh();
     }
 
     #[Computed]
@@ -214,8 +215,8 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
     {
         return $this->product->slots()
             ->where('status', SlotStatus::Available)
-            ->orderBy('slot_date')
-            ->get();
+            ->orderBy('slot_date', 'asc')
+            ->paginate(10, pageName: 'available-page');
     }
 
     #[Computed]
@@ -223,215 +224,218 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
     {
         return $this->product->slots()
             ->where('status', '!=', SlotStatus::Available)
-            ->orderBy('slot_date')
-            ->get();
+            ->orderBy('slot_date', 'desc')
+            ->paginate(5, pageName: 'booked-page');
     }
 }; ?>
 
 <div>
     <div class="mb-8 flex items-start justify-between">
-            <div>
-                <div class="mb-2 flex items-center gap-3">
-                    <flux:heading size="xl">{{ $product->name }}</flux:heading>
-                    <flux:badge variant="{{ $product->is_active ? 'lime' : 'zinc' }}">
-                        {{ $product->is_active ? 'Active' : 'Inactive' }}
-                    </flux:badge>
-                </div>
-                <flux:subheading>{{ $product->description }}</flux:subheading>
+        <div>
+            <div class="mb-2 flex items-center gap-3">
+                <flux:heading size="xl">{{ $product->name }}</flux:heading>
+                <flux:badge variant="{{ $product->is_active ? 'lime' : 'zinc' }}">
+                    {{ $product->is_active ? 'Active' : 'Inactive' }}
+                </flux:badge>
             </div>
-            
-            <div class="flex gap-2">
-                <flux:button wire:click="openBatchModal" variant="filled" icon="squares-plus" class="bg-blue-600 hover:bg-blue-700">
-                    Batch Generate
-                </flux:button>
-                <flux:button wire:click="openSlotModal" variant="primary" icon="plus">
-                    Add Single Slot
-                </flux:button>
-                <flux:button :href="route('products.index')" variant="ghost">
-                    Back to Products
-                </flux:button>
+            <flux:subheading>{{ $product->description }}</flux:subheading>
+        </div>
+        
+        <div class="flex gap-2">
+            <flux:button wire:click="openBatchModal" variant="filled" icon="squares-plus" class="bg-blue-600 hover:bg-blue-700">
+                Batch Generate
+            </flux:button>
+            <flux:button wire:click="openSlotModal" variant="primary" icon="plus">
+                Add Single Slot
+            </flux:button>
+            <flux:button :href="route('products.index')" variant="ghost">
+                Back to Products
+            </flux:button>
+        </div>
+    </div>
+
+    <div class="grid gap-8 lg:grid-cols-3">
+        <div class="lg:col-span-2 space-y-8">
+            <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                <flux:heading size="lg" class="mb-4">Product Details</flux:heading>
+                
+                <div class="grid gap-6 sm:grid-cols-2">
+                    <div>
+                        <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Product Type</flux:text>
+                        <flux:text class="mt-1 capitalize">{{ str_replace('_', ' ', $product->type) }}</flux:text>
+                    </div>
+                    
+                    <div>
+                        <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Base Price</flux:text>
+                        <flux:heading size="lg" class="mt-1">${{ number_format($product->base_price, 2) }}</flux:heading>
+                    </div>
+                    
+                    <div>
+                        <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Duration</flux:text>
+                        <flux:text class="mt-1">{{ $product->duration_minutes }} minutes</flux:text>
+                    </div>
+                    
+                    <div>
+                        <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Status</flux:text>
+                        <flux:text class="mt-1">{{ $product->is_active ? 'Active' : 'Inactive' }}</flux:text>
+                    </div>
+                </div>
+            </div>
+
+            @if($product->requirements->count() > 0)
+                <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                    <flux:heading size="lg" class="mb-4">Requirements</flux:heading>
+                    
+                    <div class="space-y-4">
+                        @foreach($product->requirements as $requirement)
+                            <div class="flex items-start justify-between rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-600 dark:bg-zinc-700/50">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <flux:text class="font-medium">{{ $requirement->name }}</flux:text>
+                                        @if($requirement->is_required)
+                                            <flux:badge variant="red" size="sm">Required</flux:badge>
+                                        @else
+                                            <flux:badge variant="zinc" size="sm">Optional</flux:badge>
+                                        @endif
+                                    </div>
+                                    
+                                    @if($requirement->description)
+                                        <flux:text size="sm" class="mt-1 text-zinc-600 dark:text-zinc-400">
+                                            {{ $requirement->description }}
+                                        </flux:text>
+                                    @endif
+                                    
+                                    <flux:text size="sm" class="mt-2 capitalize text-zinc-500">
+                                        Type: {{ str_replace('_', ' ', $requirement->type) }}
+                                    </flux:text>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                <flux:heading size="lg" class="mb-4">Available Slots</flux:heading>
+                
+                @if($this->availableSlots->count() > 0)
+                    <flux:table :paginate="$this->availableSlots">
+                        <flux:table.columns>
+                            <flux:table.column>Date</flux:table.column>
+                            <flux:table.column>Price</flux:table.column>
+                            <flux:table.column>Notes</flux:table.column>
+                            <flux:table.column></flux:table.column>
+                        </flux:table.columns>
+
+                        <flux:table.rows>
+                            @foreach ($this->availableSlots as $slot)
+                                <flux:table.row :key="$slot->id">
+                                    <flux:table.cell class="font-medium">
+                                        {{ $slot->slot_date->format('M j, Y') }}
+                                        @if($slot->slot_time)
+                                            <span class="text-xs text-zinc-500 ml-1">{{ $slot->slot_time->format('H:i') }}</span>
+                                        @endif
+                                    </flux:table.cell>
+                                    <flux:table.cell>
+                                        <flux:badge color="green" size="sm" inset="top bottom">${{ number_format($slot->price, 2) }}</flux:badge>
+                                    </flux:table.cell>
+                                    <flux:table.cell class="text-zinc-500 italic text-sm">
+                                        {{ Str::limit($slot->notes, 30) ?: '-' }}
+                                    </flux:table.cell>
+                                    <flux:table.cell>
+                                        <div class="flex justify-end">
+                                            <flux:button wire:click="deleteSlot({{ $slot->id }})" variant="ghost" size="sm" icon="trash" />
+                                        </div>
+                                    </flux:table.cell>
+                                </flux:table.row>
+                            @endforeach
+                        </flux:table.rows>
+                    </flux:table>
+                @else
+                    <flux:text class="text-zinc-500">No available slots. Add some to start accepting bookings.</flux:text>
+                @endif
             </div>
         </div>
 
-        <div class="grid gap-8 lg:grid-cols-3">
-            <div class="lg:col-span-2 space-y-8">
-                <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                    <flux:heading size="lg" class="mb-4">Product Details</flux:heading>
-                    
-                    <div class="grid gap-6 sm:grid-cols-2">
-                        <div>
-                            <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Product Type</flux:text>
-                            <flux:text class="mt-1 capitalize">{{ str_replace('_', ' ', $product->type) }}</flux:text>
-                        </div>
-                        
-                        <div>
-                            <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Base Price</flux:text>
-                            <flux:heading size="lg" class="mt-1">${{ number_format($product->base_price, 2) }}</flux:heading>
-                        </div>
-                        
-                        <div>
-                            <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Duration</flux:text>
-                            <flux:text class="mt-1">{{ $product->duration_minutes }} minutes</flux:text>
-                        </div>
-                        
-                        <div>
-                            <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Status</flux:text>
-                            <flux:text class="mt-1">{{ $product->is_active ? 'Active' : 'Inactive' }}</flux:text>
-                        </div>
+        <div class="space-y-6">
+            <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                <flux:heading size="lg" class="mb-4">Inventory Health</flux:heading>
+                
+                @php
+                    $totalCount = $product->slots()->count();
+                    $availableCount = $product->slots()->where('status', SlotStatus::Available)->count();
+                    $bookedCount = $product->slots()->where('status', '!=', SlotStatus::Available)->count();
+                    $fillRate = $totalCount > 0 ? round(($bookedCount / $totalCount) * 100) : 0;
+                    $projectedRevenue = $product->slots()->where('status', '!=', SlotStatus::Available)->sum('price');
+                    $availableRevenue = $product->slots()->where('status', SlotStatus::Available)->sum('price');
+                @endphp
+                
+                <div class="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                    <div class="flex items-center justify-between">
+                        <flux:text class="font-medium text-blue-800 dark:text-blue-200">Fill Rate</flux:text>
+                        <flux:heading size="lg" class="text-blue-900 dark:text-blue-100">{{ $fillRate }}%</flux:heading>
+                    </div>
+                    <div class="mt-2 h-2 rounded-full bg-blue-200 dark:bg-blue-800">
+                        <div class="h-2 rounded-full bg-blue-600" style="width: {{ $fillRate }}%"></div>
                     </div>
                 </div>
-
-                @if($product->requirements->count() > 0)
-                    <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                        <flux:heading size="lg" class="mb-4">Requirements</flux:heading>
-                        
-                        <div class="space-y-4">
-                            @foreach($product->requirements as $requirement)
-                                <div class="flex items-start justify-between rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-600 dark:bg-zinc-700/50">
-                                    <div class="flex-1">
-                                        <div class="flex items-center gap-2">
-                                            <flux:text class="font-medium">{{ $requirement->name }}</flux:text>
-                                            @if($requirement->is_required)
-                                                <flux:badge variant="red" size="sm">Required</flux:badge>
-                                            @else
-                                                <flux:badge variant="zinc" size="sm">Optional</flux:badge>
-                                            @endif
-                                        </div>
-                                        
-                                        @if($requirement->description)
-                                            <flux:text size="sm" class="mt-1 text-zinc-600 dark:text-zinc-400">
-                                                {{ $requirement->description }}
-                                            </flux:text>
-                                        @endif
-                                        
-                                        <flux:text size="sm" class="mt-2 capitalize text-zinc-500">
-                                            Type: {{ str_replace('_', ' ', $requirement->type) }}
-                                        </flux:text>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
+                
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="text-center rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+                        <flux:text class="font-semibold text-green-900 dark:text-green-100">Available</flux:text>
+                        <flux:heading size="xl" class="text-green-800 dark:text-green-200">{{ $availableCount }}</flux:heading>
+                        <flux:text size="sm" class="text-green-600 dark:text-green-400">${{ number_format($availableRevenue, 0) }} potential</flux:text>
                     </div>
-                @endif
-
-                <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                    <flux:heading size="lg" class="mb-4">Available Slots</flux:heading>
                     
-                    @if($this->availableSlots->count() > 0)
-                        <div class="grid gap-4 sm:grid-cols-2">
-                            @foreach($this->availableSlots as $slot)
-                                <div class="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
-                                    <div class="flex items-center justify-between">
-                                        <div>
-                                            <flux:text class="font-medium">{{ $slot->slot_date->format('M j, Y') }}</flux:text>
-                                            <flux:text size="sm" class="text-green-700 dark:text-green-400">
-                                                ${{ number_format($slot->price, 2) }}
-                                            </flux:text>
-                                        </div>
-                                        
-                                        <flux:button wire:click="deleteSlot({{ $slot->id }})" variant="danger" size="sm">
-                                            <flux:icon.trash variant="micro" />
-                                        </flux:button>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-                    @else
-                        <flux:text class="text-zinc-500">No available slots. Add some to start accepting bookings.</flux:text>
-                    @endif
+                    <div class="text-center rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                        <flux:text class="font-semibold text-blue-900 dark:text-blue-100">Booked</flux:text>
+                        <flux:heading size="xl" class="text-blue-800 dark:text-blue-200">{{ $bookedCount }}</flux:heading>
+                        <flux:text size="sm" class="text-blue-600 dark:text-blue-400">${{ number_format($projectedRevenue, 0) }} confirmed</flux:text>
+                    </div>
+                </div>
+                
+                <div class="mt-6 space-y-3 border-t pt-4">
+                    <div class="flex items-center justify-between">
+                        <flux:text>Total Inventory</flux:text>
+                        <flux:text class="font-semibold">{{ $totalCount }} slots</flux:text>
+                    </div>
+                    
+                    <div class="flex items-center justify-between border-t pt-3">
+                        <flux:text class="font-medium">Total Revenue Potential</flux:text>
+                        <flux:heading size="lg" class="text-green-600">${{ number_format($projectedRevenue + $availableRevenue, 0) }}</flux:heading>
+                    </div>
                 </div>
             </div>
 
-            <div class="space-y-6">
+            @if($this->bookedSlots->count() > 0)
                 <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                    <flux:heading size="lg" class="mb-4">Inventory Health</flux:heading>
+                    <flux:heading size="lg" class="mb-4">Recent Bookings</flux:heading>
                     
-                    @php
-                        $totalSlots = $product->slots->count();
-                        $availableCount = $this->availableSlots->count();
-                        $bookedCount = $this->bookedSlots->count();
-                        $fillRate = $totalSlots > 0 ? round(($bookedCount / $totalSlots) * 100) : 0;
-                        $projectedRevenue = $this->bookedSlots->sum('price');
-                        $availableRevenue = $this->availableSlots->sum('price');
-                    @endphp
-                    
-                    <div class="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
-                        <div class="flex items-center justify-between">
-                            <flux:text class="font-medium text-blue-800 dark:text-blue-200">Fill Rate</flux:text>
-                            <flux:heading size="lg" class="text-blue-900 dark:text-blue-100">{{ $fillRate }}%</flux:heading>
-                        </div>
-                        <div class="mt-2 h-2 rounded-full bg-blue-200 dark:bg-blue-800">
-                            <div class="h-2 rounded-full bg-blue-600" style="width: {{ $fillRate }}%"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div class="text-center rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
-                            <flux:text class="font-semibold text-green-900 dark:text-green-100">Available</flux:text>
-                            <flux:heading size="xl" class="text-green-800 dark:text-green-200">{{ $availableCount }}</flux:heading>
-                            <flux:text size="sm" class="text-green-600 dark:text-green-400">${{ number_format($availableRevenue, 0) }} potential</flux:text>
-                        </div>
-                        
-                        <div class="text-center rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
-                            <flux:text class="font-semibold text-blue-900 dark:text-blue-100">Booked</flux:text>
-                            <flux:heading size="xl" class="text-blue-800 dark:text-blue-200">{{ $bookedCount }}</flux:heading>
-                            <flux:text size="sm" class="text-blue-600 dark:text-blue-400">${{ number_format($projectedRevenue, 0) }} confirmed</flux:text>
-                        </div>
-                    </div>
-                    
-                    <div class="mt-6 space-y-3 border-t pt-4">
-                        <div class="flex items-center justify-between">
-                            <flux:text>Total Inventory</flux:text>
-                            <flux:text class="font-semibold">{{ $totalSlots }} slots</flux:text>
-                        </div>
-                        
-                        <div class="flex items-center justify-between">
-                            <flux:text>Requirements</flux:text>
-                            <flux:text class="font-semibold">{{ $product->requirements->count() }} fields</flux:text>
-                        </div>
-                        
-                        <div class="flex items-center justify-between">
-                            <flux:text>Avg. Price</flux:text>
-                            <flux:text class="font-semibold">${{ $totalSlots > 0 ? number_format($product->slots->avg('price'), 2) : '0.00' }}</flux:text>
-                        </div>
-                        
-                        <div class="flex items-center justify-between border-t pt-3">
-                            <flux:text class="font-medium">Total Revenue Potential</flux:text>
-                            <flux:heading size="lg" class="text-green-600">${{ number_format($projectedRevenue + $availableRevenue, 0) }}</flux:heading>
-                        </div>
-                    </div>
-                </div>
-
-                @if($this->bookedSlots->count() > 0)
-                    <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                        <flux:heading size="lg" class="mb-4">Recent Bookings</flux:heading>
-                        
-                        <div class="space-y-3">
-                            @foreach($this->bookedSlots->take(5) as $slot)
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <flux:text size="sm" class="font-medium">{{ $slot->slot_date->format('M j') }}</flux:text>
+                    <flux:table :paginate="$this->bookedSlots">
+                        <flux:table.columns>
+                            <flux:table.column>Date</flux:table.column>
+                            <flux:table.column>Status</flux:table.column>
+                        </flux:table.columns>
+                        <flux:table.rows>
+                            @foreach($this->bookedSlots as $slot)
+                                <flux:table.row :key="$slot->id">
+                                    <flux:table.cell class="text-sm font-medium">
+                                        {{ $slot->slot_date->format('M j') }}
+                                    </flux:table.cell>
+                                    <flux:table.cell>
                                         <flux:badge variant="{{ $slot->status->variant() }}" size="sm">
                                             {{ $slot->status->label() }}
                                         </flux:badge>
-                                    </div>
-                                    <flux:text size="sm" class="text-zinc-500">
-                                        ${{ number_format($slot->price, 2) }}
-                                    </flux:text>
-                                </div>
+                                    </flux:table.cell>
+                                </flux:table.row>
                             @endforeach
-                        </div>
-                    </div>
-                @endif
-            </div>
+                        </flux:table.rows>
+                    </flux:table>
+                </div>
+            @endif
         </div>
-    <x-products.modals.create-slot 
-        :product="$product" 
-    />
-    
-    <x-products.modals.create-bulk-slots 
-        :product="$product"
-        :batchForm="$batchForm"
-        :batchPreview="$batchPreview"
-    />
+    </div>
+
+    <x-products.modals.create-slot :product="$product" />
+    <x-products.modals.create-bulk-slots :product="$product" :batchForm="$batchForm" :batchPreview="$batchPreview" />
 </div>

@@ -2,7 +2,7 @@
     'product',
 ])
 
-<flux:modal wire:model.self="showSlotModal" name="create-slot" class="md:w-96">
+<flux:modal wire:model.self="showSlotModal" class="md:w-96 opacity-75 ">
     <div class="space-y-6">
         <div>
             <flux:heading size="lg">Add New Slot</flux:heading>
@@ -37,9 +37,9 @@
 
             <div class="flex gap-2">
                 <flux:spacer />
-                <flux:modal.close>
-                    <flux:button variant="ghost">Cancel</flux:button>
-                </flux:modal.close>
+                <flux:button variant="ghost" @click="$wire.set('showSlotModal', false)" type="button">
+                    Cancel
+                </flux:button>
                 <flux:button variant="primary" type="submit" wire:loading.attr="disabled" wire:loading.class="opacity-75">
                     <span wire:loading.remove>Create Slot</span>
                     <span wire:loading>Creating...</span>
