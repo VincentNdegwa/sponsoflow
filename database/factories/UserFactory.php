@@ -2,25 +2,16 @@
 
 namespace Database\Factories;
 
+use App\Models\Role;
+use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-/**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
- */
 class UserFactory extends Factory
 {
-    /**
-     * The current password being used by the factory.
-     */
     protected static ?string $password;
 
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
         return [
@@ -35,9 +26,6 @@ class UserFactory extends Factory
         ];
     }
 
-    /**
-     * Indicate that the model's email address should be unverified.
-     */
     public function unverified(): static
     {
         return $this->state(fn (array $attributes) => [
@@ -45,9 +33,6 @@ class UserFactory extends Factory
         ]);
     }
 
-    /**
-     * Indicate that the model has two-factor authentication configured.
-     */
     public function withTwoFactor(): static
     {
         return $this->state(fn (array $attributes) => [
@@ -55,5 +40,50 @@ class UserFactory extends Factory
             'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
             'two_factor_confirmed_at' => now(),
         ]);
+    }
+
+    public function creatorOwner(): static
+    {
+        return $this->afterCreating(function ($user) {
+            $workspace = Workspace::factory()->creator()->create();
+            $role = Role::where('name', 'creator-owner')->first();
+            $user->addRole($role, $workspace);
+        });
+    }
+
+    public function creatorManager(): static
+    {
+        return $this->afterCreating(function ($user) {
+            $workspace = Workspace::factory()->creator()->create();
+            $role = Role::where('name', 'creator-manager')->first();
+            $user->addRole($role, $workspace);
+        });
+    }
+
+    public function brandAdmin(): static
+    {
+        return $this->afterCreating(function ($user) {
+            $workspace = Workspace::factory()->brand()->create();
+            $role = Role::where('name', 'brand-admin')->first();
+            $user->addRole($role, $workspace);
+        });
+    }
+
+    public function brandContributor(): static
+    {
+        return $this->afterCreating(function ($user) {
+            $workspace = Workspace::factory()->brand()->create();
+            $role = Role::where('name', 'brand-contributor')->first();
+            $user->addRole($role, $workspace);
+        });
+    }
+
+    public function withRole(string $roleName, Workspace $workspace = null): static
+    {
+        return $this->afterCreating(function ($user) use ($roleName, $workspace) {
+            $role = Role::where('name', $roleName)->first();
+            $workspace = $workspace ?? Workspace::factory()->create();
+            $user->addRole($role, $workspace);
+        });
     }
 }

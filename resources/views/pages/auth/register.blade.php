@@ -30,6 +30,12 @@
                 placeholder="email@example.com"
             />
 
+            <!-- Workspace Type -->
+            <flux:radio.group name="workspace_type" value="{{ old('workspace_type') }}" label="Account Type" variant="cards" class="max-sm:flex-col" required>
+                <flux:radio value="creator" checked label="Creator" />
+                <flux:radio value="brand" label="Brand" />
+            </flux:radio.group>
+
             <!-- Password -->
             <flux:input
                 name="password"
@@ -58,7 +64,6 @@
                 </flux:button>
             </div>
         </form>
-
         <div class="space-x-1 rtl:space-x-reverse text-center text-sm text-zinc-600 dark:text-zinc-400">
             <span>{{ __('Already have an account?') }}</span>
             <flux:link :href="route('login')" wire:navigate>{{ __('Log in') }}</flux:link>

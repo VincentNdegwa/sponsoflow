@@ -17,6 +17,9 @@
                 </div>
             </div>
         </div>
+        
+        <x-toast />
+        
         @fluxScripts
     </body>
 </html>
