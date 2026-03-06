@@ -248,6 +248,9 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
             <flux:button wire:click="openSlotModal" variant="primary" icon="plus">
                 Add Single Slot
             </flux:button>
+            <flux:button :href="route('products.calendar', $product)" variant="ghost" icon="calendar">
+                Calendar View
+            </flux:button>
             <flux:button :href="route('products.index')" variant="ghost">
                 Back to Products
             </flux:button>
