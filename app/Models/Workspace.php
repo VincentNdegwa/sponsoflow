@@ -42,6 +42,10 @@ class Workspace extends Model
             $query->where('name', 'owner')->where('team_id', $this->id);
         })->first();
     }
+    
+    public function products(){
+        return $this->hasMany(Product::class);
+    }
 
     public function isCreator(): bool
     {

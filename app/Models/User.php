@@ -59,4 +59,14 @@ class User extends Authenticatable implements LaratrustUser
     {
         return $this->hasRole('owner', $workspace);
     }
+
+    public function getCurrentWorkspaceAttribute(): ?Workspace
+    {
+        return $this->workspaces()->first();
+    }
+
+    public function currentWorkspace(): ?Workspace
+    {
+        return $this->workspaces()->first();
+    }
 }
