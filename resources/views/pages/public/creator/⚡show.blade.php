@@ -12,8 +12,11 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
+use Livewire\WithFileUploads; 
 
 new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Component {
+
+        use WithFileUploads;
     public User $user;
     public $userProducts;
     public $availableSlots = [];
