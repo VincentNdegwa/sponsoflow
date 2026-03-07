@@ -400,8 +400,7 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
                         selected</span>
                     <span class="text-lg font-bold">${{ number_format($this->totalAmount, 0) }}</span>
                 </div>
-                <flux:button wire:click="openDrawer('instant')" variant="solid" color="white" size="sm"
-                    class="!text-accent font-bold">
+                <flux:button wire:click="openDrawer('instant')" >
                     Continue
                 </flux:button>
             </div>
@@ -546,7 +545,7 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
                 @endif
             </div>
 
-            <div class="mt-auto pt-6 border-t border-zinc-200 dark:border-zinc-700">
+            <div class="mt-auto pt-6 border-t mb-4 border-zinc-200 dark:border-zinc-700">
                 <flux:button wire:click="processSubmission" variant="primary" class="w-full"
                     icon-trailing="arrow-right">
                     {{ $checkoutType === 'instant' ? 'Secure Payment' : 'Send Proposal' }}
