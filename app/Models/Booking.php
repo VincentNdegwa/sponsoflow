@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\BookingType;
+use App\Enums\BookingStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Builder;
@@ -14,6 +16,7 @@ class Booking extends Model
         'creator_id',
         'brand_user_id',
         'brand_workspace_id',
+        'type',
         'guest_email',
         'guest_name',
         'guest_company',
@@ -34,16 +37,11 @@ class Booking extends Model
             'amount_paid' => 'decimal:2',
             'account_claimed' => 'boolean',
             'claimed_at' => 'datetime',
+            'type' => BookingType::class,
+            'status' => BookingStatus::class,
         ];
     }
 
-    // Booking status constants
-    const STATUS_INQUIRY = 'inquiry';
-    const STATUS_COUNTER_OFFERED = 'counter_offered'; 
-    const STATUS_PENDING_PAYMENT = 'pending_payment';
-    const STATUS_CONFIRMED = 'confirmed';
-    const STATUS_COMPLETED = 'completed';
-    const STATUS_CANCELLED = 'cancelled';
 
     public function slot(): BelongsTo
     {
@@ -68,6 +66,23 @@ class Booking extends Model
     public function brandWorkspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class, 'brand_workspace_id');
+    }
+
+    public function isInstant(): bool
+    {
+        return $this->type === BookingType::INSTANT;
+    }
+
+
+    public function isInquiry(): bool
+    {
+        return $this->type === BookingType::INQUIRY;
+    }
+
+
+    public function hasSlot(): bool
+    {
+        return $this->slot_id !== null;
     }
 
     /**
@@ -106,47 +121,38 @@ class Booking extends Model
         $booking->update([
             'brand_user_id' => $user->id,
             'brand_workspace_id' => $workspace->id,
-            'status' => static::STATUS_CONFIRMED,
+            'status' => BookingStatus::CONFIRMED,
         ]);
 
         return $booking;
     }
 
-    /**
-     * Scope for inquiry bookings
-     */
     public function scopeInquiries(Builder $query): Builder
     {
-        return $query->where('status', static::STATUS_INQUIRY);
+        return $query->where('type', BookingType::INQUIRY);
+    }
+    public function scopeInstant(Builder $query): Builder
+    {
+        return $query->where('type', BookingType::INSTANT);
     }
 
-    /**
-     * Scope for confirmed bookings
-     */
     public function scopeConfirmed(Builder $query): Builder
     {
-        return $query->where('status', static::STATUS_CONFIRMED);
+        return $query->where('status', BookingStatus::CONFIRMED);
     }
 
-    /**
-     * Check if booking is an inquiry
-     */
-    public function isInquiry(): bool
+
+    public function isInquiryStatus(): bool
     {
-        return $this->status === static::STATUS_INQUIRY;
+        return $this->status === BookingStatus::INQUIRY;
     }
 
-    /**
-     * Check if booking is confirmed/paid
-     */
+
     public function isConfirmed(): bool
     {
-        return $this->status === static::STATUS_CONFIRMED;
+        return $this->status === BookingStatus::CONFIRMED;
     }
 
-    /**
-     * Get the guest's full contact information
-     */
     public function getGuestContactAttribute(): string
     {
         $parts = array_filter([

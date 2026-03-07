@@ -7,6 +7,8 @@ use App\Models\Product;
 use App\Models\Slot;
 use App\Models\Booking;
 use App\Enums\SlotStatus;
+use App\Enums\BookingType;
+use App\Enums\BookingStatus;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -57,7 +59,6 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
         $this->selectedSlots = [];
         $this->loadSlotsForProduct($productId);
 
-        // Auto-open collaboration drawer if no slots available
         if (!$this->hasSlots) {
             $this->checkoutType = 'inquiry';
             $this->showBookingDrawer = true;
@@ -77,7 +78,7 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
 
     private function loadSlotsForProduct($productId): void
     {
-        $productId = (int) $productId; // Ensure integer type
+        $productId = (int) $productId;
 
         $slots = $this->user->publicSlots()->where('product_id', $productId)->where('slot_date', '>=', now())->orderBy('slot_date')->get();
 
@@ -149,14 +150,14 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
 
         $product = $this->selectedProduct;
 
-        // Create inquiry as a Booking in "inquiry" state
         Booking::create([
+            'type' => BookingType::INQUIRY,
             'product_id' => $product->id,
             'creator_id' => $this->user->id,
             'guest_email' => $this->guestData['email'],
             'guest_name' => $this->guestData['name'],
             'guest_company' => $this->guestData['company'],
-            'amount_paid' => $this->guestData['budget'], // Proposed budget
+            'amount_paid' => $this->guestData['budget'], 
             'requirement_data' => [
                 'pitch' => $this->guestData['pitch'],
                 'campaign_goals' => $this->guestData['campaign_goals'],
@@ -165,7 +166,7 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
                 'timeline_start' => $this->guestData['timeline_start'],
                 'timeline_end' => $this->guestData['timeline_end'],
             ],
-            'status' => 'inquiry',
+            'status' => BookingStatus::INQUIRY,
             'notes' => 'Custom collaboration proposal submitted by brand',
         ]);
 
