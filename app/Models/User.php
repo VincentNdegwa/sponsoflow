@@ -77,7 +77,10 @@ class User extends Authenticatable implements LaratrustUser
 
     public function publicProducts()
     {
-        return $this->hasMany(Product::class, 'workspace_id', 'id')
+        $workspaceIds = $this->workspaces()->pluck('workspaces.id');
+        
+        return \App\Models\Product::with('requirements')
+            ->whereIn('workspace_id', $workspaceIds)
             ->where('is_public', true)
             ->where('is_active', true)
             ->orderBy('featured_order')
@@ -86,9 +89,13 @@ class User extends Authenticatable implements LaratrustUser
 
     public function publicSlots()
     {
-        return $this->hasManyThrough(Slot::class, Product::class, 'workspace_id', 'product_id')
-            ->whereHas('product', function ($q) {
-                $q->where('is_public', true)->where('is_active', true);
+        $workspaceIds = $this->workspaces()->pluck('workspaces.id');
+        
+        return \App\Models\Slot::with('product')
+            ->whereHas('product', function ($q) use ($workspaceIds) {
+                $q->whereIn('workspace_id', $workspaceIds)
+                  ->where('is_public', true)
+                  ->where('is_active', true);
             })
             ->where('status', \App\Enums\SlotStatus::Available)
             ->whereDate('slot_date', '>=', now());
