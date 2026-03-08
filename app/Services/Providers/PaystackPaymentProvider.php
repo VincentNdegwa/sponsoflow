@@ -6,7 +6,9 @@ use App\Enums\BookingStatus;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\PaymentConfiguration;
+use App\Models\User;
 use App\Models\Workspace;
+use App\Services\GuestAccountCreationService;
 use App\Services\PaymentProviderInterface;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -163,6 +165,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                     ]);
                 }
 
+                $this->handleGuestAccountCreation($payment->booking);
 
                 Log::info('Paystack payment confirmed for booking', [
                     'booking_id' => $payment->booking_id,
@@ -461,6 +464,32 @@ class PaystackPaymentProvider implements PaymentProviderInterface
             ]);
 
             return false;
+        }
+    }
+
+    /**
+     * Handle guest account creation after successful payment
+     */
+    protected function handleGuestAccountCreation(Booking $booking): void
+    {
+        try {
+            if (!$booking->brand_user_id && $booking->guest_email && $booking->guest_name) {
+                $guestAccountService = app(GuestAccountCreationService::class);
+                $user = $guestAccountService->createAccountForGuest($booking);
+                
+                if ($user) {
+                    Log::info('Guest account processed after payment', [
+                        'booking_id' => $booking->id,
+                        'user_id' => $user->id,
+                        'guest_email' => $booking->guest_email,
+                    ]);
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to handle guest account creation', [
+                'booking_id' => $booking->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

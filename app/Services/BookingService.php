@@ -21,24 +21,19 @@ class BookingService
             $creator = $data['creator'];
             $workspace = $creator->currentWorkspace();
             $productId = $data['product_id'];
-
             if (! $productId) {
                 return $this->errorResponse('Product ID is required for inquiries');
             }
-
             $product = Product::where('id', $productId)
                 ->where('workspace_id', $workspace->id)
                 ->where('is_public', true)
                 ->where('is_active', true)
                 ->first();
-
             if (! $product) {
                 return $this->errorResponse('Product not found or not available');
             }
-
             $totalAmount = $data['requirement_data']['budget'] ?? 0;
             $isGuest = ! isset($data['brand_user_id']);
-
             $bookingData = [
                 'slot_id' => null,
                 'product_id' => $product->id,
@@ -50,7 +45,6 @@ class BookingService
                 'status' => BookingStatus::INQUIRY,
                 'notes' => 'Custom collaboration proposal submitted',
             ];
-
             if ($isGuest) {
                 $bookingData['brand_user_id'] = null;
                 $bookingData['brand_workspace_id'] = null;
@@ -64,14 +58,11 @@ class BookingService
                 $bookingData['guest_name'] = null;
                 $bookingData['guest_company'] = null;
             }
-
             $booking = Booking::create($bookingData);
-
             return $this->successResponse([
                 'message' => 'Your inquiry has been submitted successfully!',
                 'booking_id' => $booking->id,
             ]);
-
         } catch (\Exception $e) {
             Log::error('Inquiry creation failed', [
                 'creator_id' => $data['creator']->id ?? null,
@@ -79,7 +70,6 @@ class BookingService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-
             return $this->errorResponse('Failed to submit inquiry. Please try again.');
         }
     }
@@ -186,17 +176,14 @@ class BookingService
     public function validateBookingAuth(User $creator, ?User $authUser): bool
     {
         if (! $authUser) {
-            return true; // Guest user
+            return true;
         }
-
         if ($authUser->id === $creator->id) {
-            return false; // Creator cannot book themselves
+            return false;
         }
-
         if (! $this->isBrandUser($authUser)) {
-            return false; // Only brand users can make bookings
+            return false;
         }
-
         return true;
     }
 
