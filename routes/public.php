@@ -8,6 +8,7 @@ Route::prefix('creator')->group(function () {
     Route::post('/{user:public_slug}/checkout', 'PublicBookingController@checkout')->name('creator.checkout');
 });
 
-Route::get('/booking/success', 'PublicBookingController@success')->name('booking.success');
-Route::get('/booking/cancel', 'PublicBookingController@cancel')->name('booking.cancel');
+// Use our new payment routes instead of the old booking ones
+Route::get('/booking/success', [App\Http\Controllers\PaymentController::class, 'success'])->name('booking.success');
+Route::get('/booking/cancel', [App\Http\Controllers\PaymentController::class, 'cancel'])->name('booking.cancel');
 Route::post('/webhooks/stripe', 'StripeWebhookController@handle')->name('webhooks.stripe');

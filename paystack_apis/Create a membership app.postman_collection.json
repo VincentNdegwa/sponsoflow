@@ -1,0 +1,1367 @@
+{
+  "info": {
+    "_postman_id": "cb1a0b98-5dcc-49af-a468-f828b07465c8",
+    "name": "Create a membership app",
+    "description": "The OpenAPI specification for creating a membership application using the [Paystack API](https://paystack.com/docs/api/).\n\n### Prerequisites\n\n1. Sign up on [Paystack](https://paystack.com/signup) to get your secret API key\n2. Set your API key as an environment variable on [Postman](https://learning.postman.com/docs/sending-requests/variables/)\n    \n\nWhen using the [Subscriptions API](https://paystack.com/docs/payments/subscriptions), Paystack automatically charges the customer at the due time. This saves you the need to run scheduled tasks for every customer.\n\nWhile with the [Charge Authorization API](https://paystack.com/docs/payments/recurring-charges), you send Paystack the charge details at the due time.\n\nThe OpenAPI specification for creating a lending application using the [Paystack API](https://paystack.com/docs/api/).\n\n### Prerequisites\n\n1. Sign up on [Paystack](https://paystack.com/signup) to get your secret API key\n2. Set your API key as an environment variable on [Postman](https://learning.postman.com/docs/sending-requests/variables/)\n    \n\nThe [Partial Debits](https://paystack.com/docs/payments/partial-debits) feature allows you to recover some revenue that would have otherwise been lost. It is currently available on request.\n\n## **Prerequisites**\n\n1. [Sign up](https://paystack.com/signup) on Paystack and retrieve your test Secret API Key. (see [guide for more](https://support.paystack.com/hc/en-us/articles/360009881600-Paystack-Test-Keys-Live-Keys-and-Webhooks))\n2. Setup your API key as a collection variable on Postman\n3. Checkout our [Developer Docs](https://paystack.com/docs) and [API Reference](https://paystack.com/docs/api/) for detailed explanations\n    \n\n## **Getting Started**\n\nWe’re going to assume you’ve already [signed up on Paystack](https://paystack.com/signup)\n\n### **Adding the collection to your Postman**\n\nGo to the [Paystack’s public workspace](https://www.postman.com/paystack-developers/workspace/paystack-api/collection/20813848-d7440b43-7461-44f5-868e-bb49b564832b?ctx=documentation) on Postman and fork the collection you’re interested in testing.\n\n<img src=\"https://content.pstmn.io/b3e0dbc1-4bb0-413f-bf58-d83bcb0f82eb/U2NyZWVuc2hvdCAyMDIyLTEwLTEzIGF0IDEzLjQzLjU4LnBuZw==\" alt=\"\" height=\"247\" width=\"149\">\n\nGive your collection a memorable label to differentiate it from the original collection and add it to your preferred workspace. Checking the “Watch original collection” option allows your collection to get updated as we update the collection.\n\n<img src=\"https://content.pstmn.io/b0c47b5b-944c-420e-95a6-8335aad8f2fc/U2NyZWVuc2hvdCAyMDIyLTEwLTEzIGF0IDEzLjUxLjA3LnBuZw==\" alt=\"\" height=\"252\" width=\"241\">\n\nAfter importing it, you should see it in your collections sidebar with the label you provided.\n\n<img src=\"https://content.pstmn.io/9dcda3f9-a5ea-4d37-b81d-e817115231e1/U2NyZWVuc2hvdCAyMDIyLTEwLTEzIGF0IDE0LjQwLjU3LnBuZw==\" alt=\"\" height=\"116\" width=\"349\">\n\n### **Import collection from Github**\n\nIf you’d like to use a different API testing tool, you can clone or fork the [Paystack Open API](https://github.com/PaystackOSS/openapi) repository from Github and use the files in the `use_cases` folder.\n\n### **Setting up your API keys**\n\nOnce you’ve setup your Paystack account, get your [test secret key](https://support.paystack.com/hc/en-us/articles/360009881600-Paystack-Test-Keys-Live-Keys-and-Webhooks) and add it as a [collection variable](https://learning.postman.com/docs/sending-requests/variables/#variable-scopes) on the Variables tab on Postman.\n\n<img src=\"https://content.pstmn.io/18e9d1e1-747f-479e-900c-a281b289ddc4/U2NyZWVuc2hvdCAyMDIyLTEwLTEzIGF0IDE3LjAwLjM3LnBuZw==\" alt=\"\" height=\"290\" width=\"441\">\n\nSwitch to the Authorization tab and clear the Token field and use two curly braces and enter the variable name you setup.\n\nThe value of `secret_key` should appear when you hover your mouse on the variable as shown below.\n\n<img src=\"https://content.pstmn.io/4c9002b3-83ce-4b16-883b-09756644645d/U2NyZWVuc2hvdCAyMDIyLTEwLTEzIGF0IDE3LjA0LjM4LnBuZw==\" alt=\"\" height=\"233\" width=\"355\">\n\nIf everything looks good, save your changes and you’re ready to explore the collection!\n\n### **Using the collection**\n\nEach endpoint in the collection has example request data and responses. The responses show you how the API responds in different scenarios.\n\n<img src=\"https://content.pstmn.io/4f33463e-d657-4567-8dab-a78a2086af56/U2NyZWVuc2hvdCAyMDIyLTEwLTEzIGF0IDE4LjEwLjEyLnBuZw==\" alt=\"\">",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "25886411",
+    "_collection_link": "https://go.postman.co/collection/20813848-cb1a0b98-5dcc-49af-a468-f828b07465c8?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "transaction",
+      "item": [
+        {
+          "name": "Initialize Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "email",
+                  "value": "person@email.com",
+                  "description": "(Required) Customer's email address"
+                },
+                {
+                  "key": "amount",
+                  "value": "10247",
+                  "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR"
+                },
+                {
+                  "key": "currency",
+                  "value": "GHS",
+                  "description": "The transaction currency"
+                },
+                {
+                  "key": "reference",
+                  "value": "123.uniq=ref-",
+                  "description": "Unique transaction reference. Only -, ., = and alphanumeric characters allowed."
+                },
+                {
+                  "key": "callback_url",
+                  "value": "https://example.com/",
+                  "description": "Fully qualified url. Use this to override the callback url provided on the dashboard for this transaction"
+                },
+                {
+                  "key": "plan",
+                  "value": "PLN_123wede",
+                  "description": "If transaction is to create a subscription to a predefined plan, provide plan code here. \nThis would invalidate the value provided in amount"
+                },
+                {
+                  "key": "invoice_limit",
+                  "value": "10",
+                  "description": "Number of times to charge customer during subscription to plan"
+                },
+                {
+                  "key": "metadata",
+                  "value": "{\"cart_id\":398,\"custom_fields\":[{\"display_name\":\"Invoice ID\",\"variable_name\":\"Invoice ID\",\"value\":209},{\"display_name\":\"Cart Items\",\"variable_name\":\"cart_items\",\"value\":\"3 bananas, 12 mangoes\"}]}",
+                  "description": "Stringified JSON object of custom data"
+                },
+                {
+                  "key": "channels",
+                  "value": "bank",
+                  "description": "An array of payment channels to control what channels you want to make available to the user to make a payment with"
+                },
+                {
+                  "key": "split_code",
+                  "value": "SPL_123AbZ",
+                  "description": "The split code of the transaction split"
+                },
+                {
+                  "key": "subaccount",
+                  "value": "ACCT_23abcdefgh",
+                  "description": "The code for the subaccount that owns the payment"
+                },
+                {
+                  "key": "transaction_charge",
+                  "value": "12300",
+                  "description": "A flat fee to charge the subaccount for a transaction. \nThis overrides the split percentage set when the subaccount was created"
+                },
+                {
+                  "key": "bearer",
+                  "value": "account",
+                  "description": "The bearer of the transaction charge"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transaction/initialize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transaction",
+                "initialize"
+              ]
+            },
+            "description": "Create a new transaction"
+          },
+          "response": [
+            {
+              "name": "Request successful",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "description": "Added as a part of security scheme: bearer",
+                    "key": "Authorization",
+                    "value": "Bearer <token>"
+                  }
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "description": "(Required) Customer's email address",
+                      "key": "email",
+                      "value": "person@email.com"
+                    },
+                    {
+                      "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR",
+                      "key": "amount",
+                      "value": "10247"
+                    },
+                    {
+                      "description": "The transaction currency",
+                      "key": "currency",
+                      "value": "GHS"
+                    },
+                    {
+                      "description": "Unique transaction reference. Only -, ., = and alphanumeric characters allowed.",
+                      "key": "reference",
+                      "value": "123.uniq=ref-"
+                    },
+                    {
+                      "description": "Fully qualified url. Use this to override the callback url provided on the dashboard for this transaction",
+                      "key": "callback_url",
+                      "value": "https://example.com/"
+                    },
+                    {
+                      "description": "If transaction is to create a subscription to a predefined plan, provide plan code here. \nThis would invalidate the value provided in amount",
+                      "key": "plan",
+                      "value": "PLN_123wede"
+                    },
+                    {
+                      "description": "Number of times to charge customer during subscription to plan",
+                      "key": "invoice_limit",
+                      "value": "10"
+                    },
+                    {
+                      "description": "Stringified JSON object of custom data",
+                      "key": "metadata",
+                      "value": "{\"cart_id\":398,\"custom_fields\":[{\"display_name\":\"Invoice ID\",\"variable_name\":\"Invoice ID\",\"value\":209},{\"display_name\":\"Cart Items\",\"variable_name\":\"cart_items\",\"value\":\"3 bananas, 12 mangoes\"}]}"
+                    },
+                    {
+                      "description": "An array of payment channels to control what channels you want to make available to the user to make a payment with",
+                      "key": "channels",
+                      "value": "bank"
+                    },
+                    {
+                      "description": "The split code of the transaction split",
+                      "key": "split_code",
+                      "value": "SPL_123AbZ"
+                    },
+                    {
+                      "description": "The code for the subaccount that owns the payment",
+                      "key": "subaccount",
+                      "value": "ACCT_23abcdefgh"
+                    },
+                    {
+                      "description": "A flat fee to charge the subaccount for a transaction. \nThis overrides the split percentage set when the subaccount was created",
+                      "key": "transaction_charge",
+                      "value": "12300"
+                    },
+                    {
+                      "description": "The bearer of the transaction charge",
+                      "key": "bearer",
+                      "value": "account"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transaction/initialize",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "transaction",
+                    "initialize"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Authorization URL created\",\n  \"data\": {\n    \"authorization_url\": \"https://checkout.paystack.com/spnajmit2hgi2c1\",\n    \"access_code\": \"spandaoende\",\n    \"reference\": \"ad123ada\"\n  }\n}"
+            },
+            {
+              "name": "Unauthorized operation",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "description": "Added as a part of security scheme: bearer",
+                    "key": "Authorization",
+                    "value": "Bearer <token>"
+                  }
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "description": "(Required) Customer's email address",
+                      "key": "email",
+                      "value": "person@email.com"
+                    },
+                    {
+                      "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR",
+                      "key": "amount",
+                      "value": "10247"
+                    },
+                    {
+                      "description": "The transaction currency",
+                      "key": "currency",
+                      "value": "GHS"
+                    },
+                    {
+                      "description": "Unique transaction reference. Only -, ., = and alphanumeric characters allowed.",
+                      "key": "reference",
+                      "value": "123.uniq=ref-"
+                    },
+                    {
+                      "description": "Fully qualified url. Use this to override the callback url provided on the dashboard for this transaction",
+                      "key": "callback_url",
+                      "value": "https://example.com/"
+                    },
+                    {
+                      "description": "If transaction is to create a subscription to a predefined plan, provide plan code here. \nThis would invalidate the value provided in amount",
+                      "key": "plan",
+                      "value": "PLN_123wede"
+                    },
+                    {
+                      "description": "Number of times to charge customer during subscription to plan",
+                      "key": "invoice_limit",
+                      "value": "10"
+                    },
+                    {
+                      "description": "Stringified JSON object of custom data",
+                      "key": "metadata",
+                      "value": "{\"cart_id\":398,\"custom_fields\":[{\"display_name\":\"Invoice ID\",\"variable_name\":\"Invoice ID\",\"value\":209},{\"display_name\":\"Cart Items\",\"variable_name\":\"cart_items\",\"value\":\"3 bananas, 12 mangoes\"}]}"
+                    },
+                    {
+                      "description": "An array of payment channels to control what channels you want to make available to the user to make a payment with",
+                      "key": "channels",
+                      "value": "bank"
+                    },
+                    {
+                      "description": "The split code of the transaction split",
+                      "key": "split_code",
+                      "value": "SPL_123AbZ"
+                    },
+                    {
+                      "description": "The code for the subaccount that owns the payment",
+                      "key": "subaccount",
+                      "value": "ACCT_23abcdefgh"
+                    },
+                    {
+                      "description": "A flat fee to charge the subaccount for a transaction. \nThis overrides the split percentage set when the subaccount was created",
+                      "key": "transaction_charge",
+                      "value": "12300"
+                    },
+                    {
+                      "description": "The bearer of the transaction charge",
+                      "key": "bearer",
+                      "value": "account"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transaction/initialize",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "transaction",
+                    "initialize"
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"status\": false,\n  \"message\": \"No Authorization Header was found\"\n}"
+            },
+            {
+              "name": "Server error",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "description": "Added as a part of security scheme: bearer",
+                    "key": "Authorization",
+                    "value": "Bearer <token>"
+                  }
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "description": "(Required) Customer's email address",
+                      "key": "email",
+                      "value": "person@email.com"
+                    },
+                    {
+                      "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR",
+                      "key": "amount",
+                      "value": "10247"
+                    },
+                    {
+                      "description": "The transaction currency",
+                      "key": "currency",
+                      "value": "GHS"
+                    },
+                    {
+                      "description": "Unique transaction reference. Only -, ., = and alphanumeric characters allowed.",
+                      "key": "reference",
+                      "value": "123.uniq=ref-"
+                    },
+                    {
+                      "description": "Fully qualified url. Use this to override the callback url provided on the dashboard for this transaction",
+                      "key": "callback_url",
+                      "value": "https://example.com/"
+                    },
+                    {
+                      "description": "If transaction is to create a subscription to a predefined plan, provide plan code here. \nThis would invalidate the value provided in amount",
+                      "key": "plan",
+                      "value": "PLN_123wede"
+                    },
+                    {
+                      "description": "Number of times to charge customer during subscription to plan",
+                      "key": "invoice_limit",
+                      "value": "10"
+                    },
+                    {
+                      "description": "Stringified JSON object of custom data",
+                      "key": "metadata",
+                      "value": "{\"cart_id\":398,\"custom_fields\":[{\"display_name\":\"Invoice ID\",\"variable_name\":\"Invoice ID\",\"value\":209},{\"display_name\":\"Cart Items\",\"variable_name\":\"cart_items\",\"value\":\"3 bananas, 12 mangoes\"}]}"
+                    },
+                    {
+                      "description": "An array of payment channels to control what channels you want to make available to the user to make a payment with",
+                      "key": "channels",
+                      "value": "bank"
+                    },
+                    {
+                      "description": "The split code of the transaction split",
+                      "key": "split_code",
+                      "value": "SPL_123AbZ"
+                    },
+                    {
+                      "description": "The code for the subaccount that owns the payment",
+                      "key": "subaccount",
+                      "value": "ACCT_23abcdefgh"
+                    },
+                    {
+                      "description": "A flat fee to charge the subaccount for a transaction. \nThis overrides the split percentage set when the subaccount was created",
+                      "key": "transaction_charge",
+                      "value": "12300"
+                    },
+                    {
+                      "description": "The bearer of the transaction charge",
+                      "key": "bearer",
+                      "value": "account"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transaction/initialize",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "transaction",
+                    "initialize"
+                  ]
+                }
+              },
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "text/plain"
+                }
+              ],
+              "cookie": [],
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "Charge Authorization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "email",
+                  "value": "person@email.com",
+                  "description": "(Required) Customer's email address used during the first transaction"
+                },
+                {
+                  "key": "amount",
+                  "value": "10247",
+                  "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR"
+                },
+                {
+                  "key": "authorization_code",
+                  "value": "AUTH_CODE",
+                  "description": "(Required) Valid authorization code to charge"
+                },
+                {
+                  "key": "reference",
+                  "value": "123.uniq=ref-2",
+                  "description": "Unique transaction reference. Only -, ., = and alphanumeric characters allowed."
+                },
+                {
+                  "key": "currency",
+                  "value": "GHS",
+                  "description": "The transaction currency"
+                },
+                {
+                  "key": "cart_id",
+                  "value": "398",
+                  "description": "Stringified JSON object of custom data"
+                },
+                {
+                  "key": "custom_fields",
+                  "value": "[{\"display_name\":\"Invoice ID\",\"variable_name\":\"Invoice ID\",\"value\":209},{\"display_name\":\"Cart Items\",\"variable_name\":\"cart_items\",\"value\":\"3 bananas, 12 mangoes\"}]",
+                  "description": "Stringified JSON object of custom data"
+                },
+                {
+                  "key": "split_code",
+                  "value": "SPL_123AbZ",
+                  "description": "The split code of the transaction split"
+                },
+                {
+                  "key": "subaccount",
+                  "value": "ACCT_23abcdefgh",
+                  "description": "The code for the subaccount that owns the payment"
+                },
+                {
+                  "key": "transaction_charge",
+                  "value": "12300",
+                  "description": "A flat fee to charge the subaccount for a transaction. \nThis overrides the split percentage set when the subaccount was created"
+                },
+                {
+                  "key": "bearer",
+                  "value": "subaccount",
+                  "description": "The bearer of the transaction charge"
+                },
+                {
+                  "key": "queue",
+                  "value": "false",
+                  "description": "If you are making a scheduled charge call, it is a good idea to queue them so the processing system does not get overloaded causing transaction processing errors."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transaction/charge_authorization",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transaction",
+                "charge_authorization"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Request successful",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "description": "Added as a part of security scheme: bearer",
+                    "key": "Authorization",
+                    "value": "Bearer <token>"
+                  }
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "description": "(Required) Customer's email address used during the first transaction",
+                      "key": "email",
+                      "value": "person@email.com"
+                    },
+                    {
+                      "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR",
+                      "key": "amount",
+                      "value": "10247"
+                    },
+                    {
+                      "description": "(Required) Valid authorization code to charge",
+                      "key": "authorization_code",
+                      "value": "AUTH_CODE"
+                    },
+                    {
+                      "description": "Unique transaction reference. Only -, ., = and alphanumeric characters allowed.",
+                      "key": "reference",
+                      "value": "123.uniq=ref-2"
+                    },
+                    {
+                      "description": "The transaction currency",
+                      "key": "currency",
+                      "value": "GHS"
+                    },
+                    {
+                      "description": "Stringified JSON object of custom data",
+                      "key": "cart_id",
+                      "value": "398"
+                    },
+                    {
+                      "description": "Stringified JSON object of custom data",
+                      "key": "custom_fields",
+                      "value": "[{\"display_name\":\"Invoice ID\",\"variable_name\":\"Invoice ID\",\"value\":209},{\"display_name\":\"Cart Items\",\"variable_name\":\"cart_items\",\"value\":\"3 bananas, 12 mangoes\"}]"
+                    },
+                    {
+                      "description": "The split code of the transaction split",
+                      "key": "split_code",
+                      "value": "SPL_123AbZ"
+                    },
+                    {
+                      "description": "The code for the subaccount that owns the payment",
+                      "key": "subaccount",
+                      "value": "ACCT_23abcdefgh"
+                    },
+                    {
+                      "description": "A flat fee to charge the subaccount for a transaction. \nThis overrides the split percentage set when the subaccount was created",
+                      "key": "transaction_charge",
+                      "value": "12300"
+                    },
+                    {
+                      "description": "The bearer of the transaction charge",
+                      "key": "bearer",
+                      "value": "subaccount"
+                    },
+                    {
+                      "description": "If you are making a scheduled charge call, it is a good idea to queue them so the processing system does not get overloaded causing transaction processing errors.",
+                      "key": "queue",
+                      "value": "false"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transaction/charge_authorization",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "transaction",
+                    "charge_authorization"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Charge attempted\",\n  \"data\": {\n    \"amount\": 500000,\n    \"currency\": \"NGN\",\n    \"reference\": \"123.uniq=ref-2\",\n    \"metadata\": \"cart_id:398, custom_fields:[{}]\",\n    \"split_code\": \"SPL_123AbZ\",\n    \"subaccount\": \"ACCT_23abcdefgh\"\n  }\n}"
+            },
+            {
+              "name": "Unauthorized operation",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "description": "Added as a part of security scheme: bearer",
+                    "key": "Authorization",
+                    "value": "Bearer <token>"
+                  }
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "description": "(Required) Customer's email address used during the first transaction",
+                      "key": "email",
+                      "value": "person@email.com"
+                    },
+                    {
+                      "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR",
+                      "key": "amount",
+                      "value": "10247"
+                    },
+                    {
+                      "description": "(Required) Valid authorization code to charge",
+                      "key": "authorization_code",
+                      "value": "AUTH_CODE"
+                    },
+                    {
+                      "description": "Unique transaction reference. Only -, ., = and alphanumeric characters allowed.",
+                      "key": "reference",
+                      "value": "123.uniq=ref-2"
+                    },
+                    {
+                      "description": "The transaction currency",
+                      "key": "currency",
+                      "value": "GHS"
+                    },
+                    {
+                      "description": "Stringified JSON object of custom data",
+                      "key": "cart_id",
+                      "value": "398"
+                    },
+                    {
+                      "description": "Stringified JSON object of custom data",
+                      "key": "custom_fields",
+                      "value": "[{\"display_name\":\"Invoice ID\",\"variable_name\":\"Invoice ID\",\"value\":209},{\"display_name\":\"Cart Items\",\"variable_name\":\"cart_items\",\"value\":\"3 bananas, 12 mangoes\"}]"
+                    },
+                    {
+                      "description": "The split code of the transaction split",
+                      "key": "split_code",
+                      "value": "SPL_123AbZ"
+                    },
+                    {
+                      "description": "The code for the subaccount that owns the payment",
+                      "key": "subaccount",
+                      "value": "ACCT_23abcdefgh"
+                    },
+                    {
+                      "description": "A flat fee to charge the subaccount for a transaction. \nThis overrides the split percentage set when the subaccount was created",
+                      "key": "transaction_charge",
+                      "value": "12300"
+                    },
+                    {
+                      "description": "The bearer of the transaction charge",
+                      "key": "bearer",
+                      "value": "subaccount"
+                    },
+                    {
+                      "description": "If you are making a scheduled charge call, it is a good idea to queue them so the processing system does not get overloaded causing transaction processing errors.",
+                      "key": "queue",
+                      "value": "false"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transaction/charge_authorization",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "transaction",
+                    "charge_authorization"
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"status\": false,\n  \"message\": \"No Authorization Header was found\"\n}"
+            },
+            {
+              "name": "Server error",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "description": "Added as a part of security scheme: bearer",
+                    "key": "Authorization",
+                    "value": "Bearer <token>"
+                  }
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "description": "(Required) Customer's email address used during the first transaction",
+                      "key": "email",
+                      "value": "person@email.com"
+                    },
+                    {
+                      "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR",
+                      "key": "amount",
+                      "value": "10247"
+                    },
+                    {
+                      "description": "(Required) Valid authorization code to charge",
+                      "key": "authorization_code",
+                      "value": "AUTH_CODE"
+                    },
+                    {
+                      "description": "Unique transaction reference. Only -, ., = and alphanumeric characters allowed.",
+                      "key": "reference",
+                      "value": "123.uniq=ref-2"
+                    },
+                    {
+                      "description": "The transaction currency",
+                      "key": "currency",
+                      "value": "GHS"
+                    },
+                    {
+                      "description": "Stringified JSON object of custom data",
+                      "key": "cart_id",
+                      "value": "398"
+                    },
+                    {
+                      "description": "Stringified JSON object of custom data",
+                      "key": "custom_fields",
+                      "value": "[{\"display_name\":\"Invoice ID\",\"variable_name\":\"Invoice ID\",\"value\":209},{\"display_name\":\"Cart Items\",\"variable_name\":\"cart_items\",\"value\":\"3 bananas, 12 mangoes\"}]"
+                    },
+                    {
+                      "description": "The split code of the transaction split",
+                      "key": "split_code",
+                      "value": "SPL_123AbZ"
+                    },
+                    {
+                      "description": "The code for the subaccount that owns the payment",
+                      "key": "subaccount",
+                      "value": "ACCT_23abcdefgh"
+                    },
+                    {
+                      "description": "A flat fee to charge the subaccount for a transaction. \nThis overrides the split percentage set when the subaccount was created",
+                      "key": "transaction_charge",
+                      "value": "12300"
+                    },
+                    {
+                      "description": "The bearer of the transaction charge",
+                      "key": "bearer",
+                      "value": "subaccount"
+                    },
+                    {
+                      "description": "If you are making a scheduled charge call, it is a good idea to queue them so the processing system does not get overloaded causing transaction processing errors.",
+                      "key": "queue",
+                      "value": "false"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transaction/charge_authorization",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "transaction",
+                    "charge_authorization"
+                  ]
+                }
+              },
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "text/plain"
+                }
+              ],
+              "cookie": [],
+              "body": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Create Plan",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "name",
+              "value": "My monthly membership",
+              "description": "(Required) Name of plan"
+            },
+            {
+              "key": "amount",
+              "value": "20000",
+              "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR"
+            },
+            {
+              "key": "interval",
+              "value": "monthly",
+              "description": "(Required) Interval in words. Valid intervals are daily, weekly, monthly,biannually, annually"
+            },
+            {
+              "key": "description",
+              "value": "Monthly membership payment plan",
+              "description": "A description for this plan"
+            },
+            {
+              "key": "send_invoices",
+              "value": "true",
+              "description": "Set to false if you don't want invoices to be sent to your customers"
+            },
+            {
+              "key": "send_sms",
+              "value": "false",
+              "description": "Set to false if you don't want text messages to be sent to your customers"
+            },
+            {
+              "key": "currency",
+              "value": "NGN",
+              "description": "Currency in which amount is set. Allowed values are NGN, GHS, ZAR or USD"
+            },
+            {
+              "key": "invoice_limit",
+              "value": "0",
+              "description": "Number of invoices to raise during subscription to this plan. \nCan be overridden by specifying an invoice_limit while subscribing."
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/plan",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "plan"
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Create Plan",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "description": "Added as a part of security scheme: bearer",
+                "key": "Authorization",
+                "value": "Bearer <token>"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "description": "(Required) Name of plan",
+                  "key": "name",
+                  "value": "My monthly membership"
+                },
+                {
+                  "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR",
+                  "key": "amount",
+                  "value": "20000"
+                },
+                {
+                  "description": "(Required) Interval in words. Valid intervals are daily, weekly, monthly,biannually, annually",
+                  "key": "interval",
+                  "value": "monthly"
+                },
+                {
+                  "description": "A description for this plan",
+                  "key": "description",
+                  "value": "Monthly membership payment plan"
+                },
+                {
+                  "description": "Set to false if you don't want invoices to be sent to your customers",
+                  "key": "send_invoices",
+                  "value": "true"
+                },
+                {
+                  "description": "Set to false if you don't want text messages to be sent to your customers",
+                  "key": "send_sms",
+                  "value": "false"
+                },
+                {
+                  "description": "Currency in which amount is set. Allowed values are NGN, GHS, ZAR or USD",
+                  "key": "currency",
+                  "value": "NGN"
+                },
+                {
+                  "description": "Number of invoices to raise during subscription to this plan. \nCan be overridden by specifying an invoice_limit while subscribing.",
+                  "key": "invoice_limit",
+                  "value": "0"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "plan"
+              ]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"status\": true,\n  \"message\": \"Plan created\",\n  \"data\": {\n    \"name\": \"My monthly membership\",\n    \"interval\": \"monthly\",\n    \"amount\": 20000,\n    \"description\": \"Monthly membership payment plan\",\n    \"integration\": 463433,\n    \"domain\": \"test\",\n    \"currency\": \"NGN\",\n    \"plan_code\": \"PLN_y4y1wkydoptw6zv\",\n    \"invoice_limit\": 0,\n    \"send_invoices\": true,\n    \"send_sms\": true,\n    \"hosted_page\": false,\n    \"migrate\": false,\n    \"is_archived\": false,\n    \"id\": 393872,\n    \"createdAt\": \"2022-09-22T02:15:06.702Z\",\n    \"updatedAt\": \"2022-09-22T02:15:06.702Z\"\n  }\n}"
+        },
+        {
+          "name": "Unauthorized operation",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "description": "Added as a part of security scheme: bearer",
+                "key": "Authorization",
+                "value": "Bearer <token>"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "description": "(Required) Name of plan",
+                  "key": "name",
+                  "value": "My monthly membership"
+                },
+                {
+                  "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR",
+                  "key": "amount",
+                  "value": "20000"
+                },
+                {
+                  "description": "(Required) Interval in words. Valid intervals are daily, weekly, monthly,biannually, annually",
+                  "key": "interval",
+                  "value": "monthly"
+                },
+                {
+                  "description": "A description for this plan",
+                  "key": "description",
+                  "value": "Monthly membership payment plan"
+                },
+                {
+                  "description": "Set to false if you don't want invoices to be sent to your customers",
+                  "key": "send_invoices",
+                  "value": "true"
+                },
+                {
+                  "description": "Set to false if you don't want text messages to be sent to your customers",
+                  "key": "send_sms",
+                  "value": "false"
+                },
+                {
+                  "description": "Currency in which amount is set. Allowed values are NGN, GHS, ZAR or USD",
+                  "key": "currency",
+                  "value": "NGN"
+                },
+                {
+                  "description": "Number of invoices to raise during subscription to this plan. \nCan be overridden by specifying an invoice_limit while subscribing.",
+                  "key": "invoice_limit",
+                  "value": "0"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "plan"
+              ]
+            }
+          },
+          "status": "Unauthorized",
+          "code": 401,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"status\": false,\n  \"message\": \"No Authorization Header was found\"\n}"
+        },
+        {
+          "name": "Server error",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "description": "Added as a part of security scheme: bearer",
+                "key": "Authorization",
+                "value": "Bearer <token>"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "description": "(Required) Name of plan",
+                  "key": "name",
+                  "value": "My monthly membership"
+                },
+                {
+                  "description": "(Required) Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR",
+                  "key": "amount",
+                  "value": "20000"
+                },
+                {
+                  "description": "(Required) Interval in words. Valid intervals are daily, weekly, monthly,biannually, annually",
+                  "key": "interval",
+                  "value": "monthly"
+                },
+                {
+                  "description": "A description for this plan",
+                  "key": "description",
+                  "value": "Monthly membership payment plan"
+                },
+                {
+                  "description": "Set to false if you don't want invoices to be sent to your customers",
+                  "key": "send_invoices",
+                  "value": "true"
+                },
+                {
+                  "description": "Set to false if you don't want text messages to be sent to your customers",
+                  "key": "send_sms",
+                  "value": "false"
+                },
+                {
+                  "description": "Currency in which amount is set. Allowed values are NGN, GHS, ZAR or USD",
+                  "key": "currency",
+                  "value": "NGN"
+                },
+                {
+                  "description": "Number of invoices to raise during subscription to this plan. \nCan be overridden by specifying an invoice_limit while subscribing.",
+                  "key": "invoice_limit",
+                  "value": "0"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "plan"
+              ]
+            }
+          },
+          "status": "Internal Server Error",
+          "code": 500,
+          "_postman_previewlanguage": "text",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "text/plain"
+            }
+          ],
+          "cookie": [],
+          "body": ""
+        }
+      ]
+    },
+    {
+      "name": "Create Subscription",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "customer",
+              "value": "person@example.com",
+              "description": "(Required) Customer's email address or customer code"
+            },
+            {
+              "key": "plan",
+              "value": "PLN_y4y1wkydoptw6zv",
+              "description": "(Required) Plan code that the customer should subscribe to"
+            },
+            {
+              "key": "authorization",
+              "value": "AUTH_Codaad23",
+              "description": "If customer has multiple authorizations, you can set the desired authorization you wish to use for this subscription here. \nIf this is not supplied, the customer's most recent authorization would be used"
+            },
+            {
+              "key": "start_date",
+              "value": "1988-01-18T18:18:51.098Z",
+              "description": "Set the date for the first debit. (ISO 8601 format) e.g. 2017-05-16T00:30:13+01:00"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/subscription",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "subscription"
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Create Subscription",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "description": "Added as a part of security scheme: bearer",
+                "key": "Authorization",
+                "value": "Bearer <token>"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "description": "(Required) Customer's email address or customer code",
+                  "key": "customer",
+                  "value": "person@example.com"
+                },
+                {
+                  "description": "(Required) Plan code that the customer should subscribe to",
+                  "key": "plan",
+                  "value": "PLN_y4y1wkydoptw6zv"
+                },
+                {
+                  "description": "If customer has multiple authorizations, you can set the desired authorization you wish to use for this subscription here. \nIf this is not supplied, the customer's most recent authorization would be used",
+                  "key": "authorization",
+                  "value": "AUTH_Codaad23"
+                },
+                {
+                  "description": "Set the date for the first debit. (ISO 8601 format) e.g. 2017-05-16T00:30:13+01:00",
+                  "key": "start_date",
+                  "value": "1988-01-18T18:18:51.098Z"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subscription",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subscription"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"status\": true,\n  \"message\": \"Subscription successfully created\",\n  \"data\": {\n    \"customer\": 89363925,\n    \"plan\": 393873,\n    \"integration\": 463433,\n    \"domain\": \"test\",\n    \"start\": 1663817490,\n    \"status\": \"active\",\n    \"quantity\": 1,\n    \"amount\": 20000,\n    \"authorization\": 374536802,\n    \"invoice_limit\": 0,\n    \"split_code\": null,\n    \"subscription_code\": \"SUB_k0alurkz6l2d3nz\",\n    \"email_token\": \"txyhn3zjzcr9xlo\",\n    \"id\": 456933,\n    \"cancelledAt\": null,\n    \"createdAt\": \"2022-09-22T03:31:30.886Z\",\n    \"updatedAt\": \"2022-09-22T03:31:30.886Z\",\n    \"cron_expression\": \"31 3 22 * *\",\n    \"next_payment_date\": \"2022-10-22T03:31:00.000Z\"\n  }\n}"
+        },
+        {
+          "name": "Unauthorized operation",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "description": "Added as a part of security scheme: bearer",
+                "key": "Authorization",
+                "value": "Bearer <token>"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "description": "(Required) Customer's email address or customer code",
+                  "key": "customer",
+                  "value": "person@example.com"
+                },
+                {
+                  "description": "(Required) Plan code that the customer should subscribe to",
+                  "key": "plan",
+                  "value": "PLN_y4y1wkydoptw6zv"
+                },
+                {
+                  "description": "If customer has multiple authorizations, you can set the desired authorization you wish to use for this subscription here. \nIf this is not supplied, the customer's most recent authorization would be used",
+                  "key": "authorization",
+                  "value": "AUTH_Codaad23"
+                },
+                {
+                  "description": "Set the date for the first debit. (ISO 8601 format) e.g. 2017-05-16T00:30:13+01:00",
+                  "key": "start_date",
+                  "value": "1988-01-18T18:18:51.098Z"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subscription",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subscription"
+              ]
+            }
+          },
+          "status": "Unauthorized",
+          "code": 401,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"status\": false,\n  \"message\": \"No Authorization Header was found\"\n}"
+        },
+        {
+          "name": "Server error",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "description": "Added as a part of security scheme: bearer",
+                "key": "Authorization",
+                "value": "Bearer <token>"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "description": "(Required) Customer's email address or customer code",
+                  "key": "customer",
+                  "value": "person@example.com"
+                },
+                {
+                  "description": "(Required) Plan code that the customer should subscribe to",
+                  "key": "plan",
+                  "value": "PLN_y4y1wkydoptw6zv"
+                },
+                {
+                  "description": "If customer has multiple authorizations, you can set the desired authorization you wish to use for this subscription here. \nIf this is not supplied, the customer's most recent authorization would be used",
+                  "key": "authorization",
+                  "value": "AUTH_Codaad23"
+                },
+                {
+                  "description": "Set the date for the first debit. (ISO 8601 format) e.g. 2017-05-16T00:30:13+01:00",
+                  "key": "start_date",
+                  "value": "1988-01-18T18:18:51.098Z"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subscription",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subscription"
+              ]
+            }
+          },
+          "status": "Internal Server Error",
+          "code": 500,
+          "_postman_previewlanguage": "text",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "text/plain"
+            }
+          ],
+          "cookie": [],
+          "body": ""
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "<Bearer Token>",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://api.paystack.co",
+      "type": "string"
+    }
+  ]
+}

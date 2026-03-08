@@ -6,6 +6,7 @@ use App\Enums\BookingType;
 use App\Enums\BookingStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Builder;
 
 class Booking extends Model
@@ -22,8 +23,6 @@ class Booking extends Model
         'guest_company',
         'requirement_data',
         'amount_paid',
-        'stripe_payment_intent_id',
-        'stripe_session_id',
         'status',
         'account_claimed',
         'claimed_at',
@@ -66,6 +65,31 @@ class Booking extends Model
     public function brandWorkspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class, 'brand_workspace_id');
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(BookingPayment::class);
+    }
+
+    public function latestPayment(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(BookingPayment::class)->latest();
+    }
+
+    public function getPaymentFor(string $provider): ?BookingPayment
+    {
+        return $this->payments()->where('provider', $provider)->first();
+    }
+
+    public function hasSuccessfulPayment(): bool
+    {
+        return $this->payments()->completed()->exists();
+    }
+
+    public function getSuccessfulPayment(): ?BookingPayment
+    {
+        return $this->payments()->completed()->first();
     }
 
     public function isInstant(): bool
@@ -116,8 +140,18 @@ class Booking extends Model
             ]);
         }
 
-        // 3. Finalize the Booking
-        $booking = static::where('stripe_session_id', $session['id'])->first();
+        // 3. Find booking via payment record instead of session_id directly
+        $payment = BookingPayment::where('session_id', $session['id'])
+            ->orWhere('provider_reference', $session['id'])
+            ->first();
+            
+        if (!$payment) {
+            throw new \Exception('Payment record not found for session: ' . $session['id']);
+        }
+        
+        $booking = $payment->booking;
+        
+        // 4. Finalize the Booking  
         $booking->update([
             'brand_user_id' => $user->id,
             'brand_workspace_id' => $workspace->id,

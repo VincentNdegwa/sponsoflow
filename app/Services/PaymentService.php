@@ -1,0 +1,176 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Booking;
+use App\Models\PaymentConfiguration;
+use App\Models\Workspace;
+use App\Services\Providers\StripePaymentProvider;
+use App\Support\CurrencySupport;
+
+class PaymentService
+{
+    protected array $providers = [];
+
+    public function __construct()
+    {
+        $this->providers = [
+            'stripe' => StripePaymentProvider::class,
+            'paystack' => \App\Services\Providers\PaystackPaymentProvider::class,
+            // Future providers can be added here
+            // 'paypal' => PayPalPaymentProvider::class,
+            // 'square' => SquarePaymentProvider::class,
+        ];
+    }
+
+    public function createCheckoutSession(Booking $booking, string $brandCountry = 'global'): array
+    {
+        $workspace = $booking->product->workspace;
+        $recommendedProvider = $workspace->getRecommendedProvider($brandCountry);
+        $paymentConfig = $workspace->activePaymentConfiguration($recommendedProvider);
+
+        if (! $paymentConfig) {
+            throw new \Exception("No active payment configuration found for workspace: {$workspace->name} with provider: {$recommendedProvider}");
+        }
+
+        $provider = $this->getProvider($paymentConfig);
+
+        return $provider->createCheckoutSession($booking, $paymentConfig);
+    }
+
+    public function handleSuccessfulPayment(string $sessionId, string $provider = 'stripe'): void
+    {
+        $providerInstance = $this->getProviderByName($provider);
+        $providerInstance->handleSuccessfulPayment($sessionId);
+    }
+
+    public function createConnectAccount(Workspace $workspace, string $provider = null, array $bankDetails = []): array
+    {
+        // Auto-select best provider if not specified
+        if (!$provider) {
+            $provider = $workspace->getRecommendedProvider();
+        }
+        
+        // Validate provider supports workspace currency
+        if (!$workspace->supportsProvider($provider)) {
+            throw new \Exception("Provider '{$provider}' does not support currency '{$workspace->currency}'");
+        }
+
+        $providerInstance = $this->getProviderByName($provider);
+
+        return $providerInstance->createConnectAccount($workspace, $bankDetails);
+    }
+
+    public function getOnboardingUrl(PaymentConfiguration $config): ?string
+    {
+        if (! $config->provider_account_id) {
+            return null;
+        }
+
+        $provider = $this->getProvider($config);
+
+        return $provider->getOnboardingUrl($config);
+    }
+
+    public function isAccountVerified(PaymentConfiguration $config): bool
+    {
+        if (! $config->provider_account_id) {
+            return false;
+        }
+
+        $provider = $this->getProvider($config);
+
+        return $provider->isAccountVerified($config);
+    }
+
+    protected function getProvider(PaymentConfiguration $config): PaymentProviderInterface
+    {
+        return $this->getProviderByName($config->provider);
+    }
+
+    protected function getProviderByName(string $provider): PaymentProviderInterface
+    {
+        if (! isset($this->providers[$provider])) {
+            throw new \Exception("Payment provider '{$provider}' not supported");
+        }
+
+        $providerClass = $this->providers[$provider];
+
+        return app($providerClass);
+    }
+
+    public function getAvailableProviders(): array
+    {
+        return array_keys($this->providers);
+    }
+
+    /**
+     * Release funds from escrow to creator (Paystack specific)
+     */
+    public function releaseFunds(Booking $booking): bool
+    {
+        $workspace = $booking->product->workspace;
+        $paymentConfig = $workspace->activePaymentConfiguration();
+
+        if (! $paymentConfig) {
+            throw new \Exception('No active payment configuration found for workspace: '.$workspace->name);
+        }
+
+        $provider = $this->getProvider($paymentConfig);
+
+        if (method_exists($provider, 'releaseFunds')) {
+            return $provider->releaseFunds($booking);
+        }
+
+        throw new \Exception("Provider '{$paymentConfig->provider}' does not support fund release");
+    }
+
+    /**
+     * Refund payment (handles disputes/rejections)
+     */
+    public function refundPayment(Booking $booking, string $reason = 'Work rejected'): bool
+    {
+        $workspace = $booking->product->workspace;
+        $paymentConfig = $workspace->activePaymentConfiguration();
+
+        if (! $paymentConfig) {
+            throw new \Exception('No active payment configuration found for workspace: '.$workspace->name);
+        }
+
+        $provider = $this->getProvider($paymentConfig);
+
+        if (method_exists($provider, 'refundPayment')) {
+            return $provider->refundPayment($booking, $reason);
+        }
+
+        throw new \Exception("Provider '{$paymentConfig->provider}' does not support refunds");
+    }
+
+    /**
+     * Get supported banks for a provider and country
+     */
+    public function getSupportedBanks(string $provider = 'paystack', string $countryCode = 'NG'): array
+    {
+        $providerInstance = $this->getProviderByName($provider);
+
+        if (method_exists($providerInstance, 'getSupportedBanks')) {
+            return $providerInstance->getSupportedBanks($countryCode);
+        }
+
+        return [];
+    }
+
+    /**
+     * Verify bank account details (Paystack specific)
+     */
+    public function verifyBankAccount(string $accountNumber, string $bankCode, string $provider = 'paystack'): array
+    {
+        $providerInstance = $this->getProviderByName($provider);
+
+        if (method_exists($providerInstance, 'verifyBankAccount')) {
+            return $providerInstance->verifyBankAccount($accountNumber, $bankCode);
+        }
+
+        throw new \Exception("Provider '{$provider}' does not support bank verification");
+    }
+}

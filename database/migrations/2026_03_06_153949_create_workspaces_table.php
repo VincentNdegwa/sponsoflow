@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('slug')->unique();
             $table->enum('type', ['creator', 'brand']);
+            $table->foreignId('owner_id')->constrained('users')->onDelete('cascade');
             $table->string('description')->nullable();
             $table->string('custom_domain')->nullable();
             $table->boolean('is_active')->default(true);

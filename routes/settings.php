@@ -24,4 +24,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ),
         )
         ->name('two-factor.show');
+
+    Route::livewire('settings/localization', 'pages::settings.localization')->name('settings.localization');
+    Route::livewire('settings/payments', 'pages::settings.payment')->name('settings.payments');
 });

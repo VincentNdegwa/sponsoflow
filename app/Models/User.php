@@ -3,16 +3,18 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Laratrust\Contracts\LaratrustUser;
 use Laratrust\Traits\HasRolesAndPermissions;
+use Laravel\Cashier\Billable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 
 class User extends Authenticatable implements LaratrustUser
 {
-    use HasFactory, HasRolesAndPermissions, Notifiable, TwoFactorAuthenticatable;
+    use Billable, HasFactory, HasRolesAndPermissions, Notifiable, TwoFactorAuthenticatable;
 
     protected $fillable = [
         'name',
@@ -78,7 +80,7 @@ class User extends Authenticatable implements LaratrustUser
     public function publicProducts()
     {
         $workspaceIds = $this->workspaces()->pluck('workspaces.id');
-        
+
         return \App\Models\Product::with('requirements')
             ->whereIn('workspace_id', $workspaceIds)
             ->where('is_public', true)
@@ -90,12 +92,12 @@ class User extends Authenticatable implements LaratrustUser
     public function publicSlots()
     {
         $workspaceIds = $this->workspaces()->pluck('workspaces.id');
-        
+
         return \App\Models\Slot::with('product')
             ->whereHas('product', function ($q) use ($workspaceIds) {
                 $q->whereIn('workspace_id', $workspaceIds)
-                  ->where('is_public', true)
-                  ->where('is_active', true);
+                    ->where('is_public', true)
+                    ->where('is_active', true);
             })
             ->where('status', \App\Enums\SlotStatus::Available)
             ->whereDate('slot_date', '>=', now());
@@ -109,6 +111,25 @@ class User extends Authenticatable implements LaratrustUser
     public function brandBookings()
     {
         return $this->hasMany(Booking::class, 'brand_user_id');
+    }
+
+    public function paymentConfigurations(): HasMany
+    {
+        return $this->hasMany(PaymentConfiguration::class);
+    }
+
+    public function activePaymentConfiguration(string $provider = 'stripe'): ?PaymentConfiguration
+    {
+        return $this->paymentConfigurations()
+            ->forProvider($provider)
+            ->active()
+            ->verified()
+            ->first();
+    }
+
+    public function canReceivePayments(string $provider = 'stripe'): bool
+    {
+        return $this->activePaymentConfiguration($provider)?->canReceivePayments() ?? false;
     }
 
     public function generateSlug(): string

@@ -25,7 +25,7 @@
     x-transition:leave="transition ease-in duration-100"
     x-transition:leave-start="opacity-100"
     x-transition:leave-end="opacity-0"
-    class="fixed top-4 right-4 z-500 bg-accent-foreground max-w-sm w-full"
+    class="fixed top-4 right-0 z-500 bg-zinc-100 dark:bg-zinc-900  max-w-sm w-full"
     style="display: none;"
 >
     <div class="rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 overflow-hidden">

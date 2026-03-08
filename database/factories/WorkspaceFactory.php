@@ -14,9 +14,17 @@ class WorkspaceFactory extends Factory
         return [
             'name' => $name,
             'slug' => Str::slug($name) . '-' . fake()->randomNumber(4),
+            'owner_id' => UserFactory::create()->id,
             'type' => 'creator',
             'description' => fake()->sentence(),
         ];
+    }
+
+    public function forOwner($ownerId): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'owner_id' => $ownerId,
+        ]);
     }
 
     public function creator(): static

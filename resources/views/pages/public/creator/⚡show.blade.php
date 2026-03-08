@@ -15,6 +15,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
 use Livewire\WithFileUploads;
 
 new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Component {
@@ -26,7 +27,9 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
     public ?int $selectedProductId = null;
     public array $selectedSlots = [];
     public bool $showBookingDrawer = false;
-    public string $checkoutType = 'instant'; // 'instant' or 'inquiry'
+    public string $checkoutType = BookingType::INSTANT; // 'instant' or 'inquiry'
+    public bool $isProcessing = false;
+    public ?string $errorMessage = null;
 
     // Unified form data for both instant booking and inquiries
     public array $guestData = [
@@ -89,6 +92,7 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
     {
         $this->checkoutType = $type;
         $this->showBookingDrawer = true;
+        $this->errorMessage = null;
     }
 
     public function toggleSlotSelection($slotId): void
@@ -107,6 +111,8 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
         $this->showBookingDrawer = false;
         $this->selectedSlots = [];
         $this->checkoutType = 'instant';
+        $this->errorMessage = null;
+        $this->isProcessing = false;
     }
 
     public function processSubmission(): void
@@ -131,11 +137,33 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
             }
         }
 
-        $this->dispatch('create-checkout-session', [
-            'slots' => $this->selectedSlots,
-            'guestData' => $this->guestData,
-            'requirementData' => $this->requirementData,
-        ]);
+        $this->isProcessing = true;
+        $this->errorMessage = null;
+
+        try {
+            $response = Http::post(route('creator.checkout', $this->user->public_slug), [
+                'slot_ids' => $this->selectedSlots,
+                'guest_data' => $this->guestData,
+                'requirement_data' => $this->requirementData,
+                'booking_type' => 'instant',
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                if (isset($data['checkout_url'])) {
+                    $this->redirect($data['checkout_url'], navigate: false);
+                } else {
+                    $this->errorMessage = 'Payment setup failed. Please try again.';
+                }
+            } else {
+                $responseData = $response->json();
+                $this->errorMessage = $responseData['error'] ?? 'Payment processing failed. Please try again.';
+            }
+        } catch (\Exception $e) {
+            $this->errorMessage = 'An unexpected error occurred. Please try again.';
+        } finally {
+            $this->isProcessing = false;
+        }
     }
 
     private function createInquiry(): void
@@ -148,32 +176,39 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
             'guestData.campaign_goals' => 'required|string|min:10',
         ]);
 
-        $product = $this->selectedProduct;
+        $this->isProcessing = true;
+        $this->errorMessage = null;
 
-        Booking::create([
-            'type' => BookingType::INQUIRY,
-            'product_id' => $product->id,
-            'creator_id' => $this->user->id,
-            'guest_email' => $this->guestData['email'],
-            'guest_name' => $this->guestData['name'],
-            'guest_company' => $this->guestData['company'],
-            'amount_paid' => $this->guestData['budget'], 
-            'requirement_data' => [
-                'pitch' => $this->guestData['pitch'],
-                'campaign_goals' => $this->guestData['campaign_goals'],
-                'website' => $this->guestData['website'],
-                'timeline_flexible' => $this->guestData['timeline_flexible'],
-                'timeline_start' => $this->guestData['timeline_start'],
-                'timeline_end' => $this->guestData['timeline_end'],
-            ],
-            'status' => BookingStatus::INQUIRY,
-            'notes' => 'Custom collaboration proposal submitted by brand',
-        ]);
+        try {
+            $response = Http::post(route('creator.checkout', $this->user->public_slug), [
+                'slot_ids' => [], // No specific slots for inquiries
+                'product_id' => $this->selectedProductId, // Include product ID for inquiries
+                'guest_data' => $this->guestData,
+                'requirement_data' => [
+                    'pitch' => $this->guestData['pitch'],
+                    'campaign_goals' => $this->guestData['campaign_goals'],
+                    'website' => $this->guestData['website'],
+                    'timeline_flexible' => $this->guestData['timeline_flexible'],
+                    'timeline_start' => $this->guestData['timeline_start'],
+                    'timeline_end' => $this->guestData['timeline_end'],
+                    'budget' => $this->guestData['budget'],
+                ],
+                'booking_type' => 'inquiry',
+            ]);
 
-        $this->showBookingDrawer = false;
-        $this->reset(['guestData', 'selectedSlots', 'selectedProductId']);
-
-        session()->flash('success', 'Your collaboration proposal has been sent successfully! The creator typically responds within 24 hours.');
+            if ($response->successful()) {
+                $this->showBookingDrawer = false;
+                $this->reset(['guestData', 'selectedSlots', 'selectedProductId']);
+                session()->flash('success', 'Your collaboration proposal has been sent successfully! The creator typically responds within 24 hours.');
+            } else {
+                $responseData = $response->json();
+                $this->errorMessage = $responseData['error'] ?? 'Failed to submit inquiry. Please try again.';
+            }
+        } catch (\Exception $e) {
+            $this->errorMessage = 'An unexpected error occurred. Please try again.';
+        } finally {
+            $this->isProcessing = false;
+        }
     }
 
     #[Computed]
@@ -547,9 +582,20 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
             </div>
 
             <div class="mt-auto pt-6 border-t mb-4 border-zinc-200 dark:border-zinc-700">
+                @if ($errorMessage)
+                    <div class="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                        {{ $errorMessage }}
+                    </div>
+                @endif
+
                 <flux:button wire:click="processSubmission" variant="primary" class="w-full"
-                    icon-trailing="arrow-right">
-                    {{ $checkoutType === 'instant' ? 'Secure Payment' : 'Send Proposal' }}
+                    icon-trailing="arrow-right" :disabled="$isProcessing">
+                    @if ($isProcessing)
+                        <flux:icon.arrow-path class="w-4 h-4 animate-spin mr-2" />
+                        Processing...
+                    @else
+                        {{ $checkoutType === 'instant' ? 'Secure Payment' : 'Send Proposal' }}
+                    @endif
                 </flux:button>
 
                 @if ($checkoutType === 'inquiry')

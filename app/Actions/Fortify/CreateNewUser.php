@@ -31,14 +31,14 @@ class CreateNewUser implements CreatesNewUsers
                 'password' => $input['password'],
             ]);
             $input['workspace_name'] = $user->name . "'s " . ($input['workspace_type'] === 'creator' ? 'Creator' : 'Brand') . ' Workspace';
-            $workspace = $this->createWorkspace($input);
+            $workspace = $this->createWorkspace($input, $user);
             $this->assignRole($user, $workspace, $input['workspace_type']);
 
             return $user;
         });
     }
 
-    private function createWorkspace(array $input): Workspace
+    private function createWorkspace(array $input, User $user): Workspace
     {
         $baseSlug = Str::slug($input['workspace_name']);
         $slug = $input['workspace_type'] === 'creator' 
@@ -58,6 +58,7 @@ class CreateNewUser implements CreatesNewUsers
             'slug' => $slug,
             'type' => $input['workspace_type'],
             'description' => null,
+            'owner_id' => $user->id,
         ]);
     }
 
