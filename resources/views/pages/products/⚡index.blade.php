@@ -109,7 +109,7 @@ new #[Layout('layouts::app'), Title('Products')] class extends Component {
                         </flux:table.cell>
 
                         <flux:table.cell variant="strong">
-                            ${{ number_format($product->base_price, 2) }}
+                            {{ formatMoney($product->base_price) }}
                         </flux:table.cell>
 
                         <flux:table.cell>

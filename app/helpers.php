@@ -60,7 +60,7 @@ if (! function_exists('formatMoney')) {
 }
 
 if (! function_exists('formatWorkspaceDate')) {
-    function formatWorkspaceDate(\Carbon\Carbon $date): string
+    function formatWorkspaceDate(\Carbon\CarbonInterface $date): string
     {
         $workspace = currentWorkspace();
 
@@ -73,7 +73,7 @@ if (! function_exists('formatWorkspaceDate')) {
 }
 
 if (! function_exists('formatWorkspaceTime')) {
-    function formatWorkspaceTime(\Carbon\Carbon $time): string
+    function formatWorkspaceTime(\Carbon\CarbonInterface $time): string
     {
         $workspace = currentWorkspace();
 

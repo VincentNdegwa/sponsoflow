@@ -250,7 +250,14 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
 }; ?>
 
 <div>
-    <div class="mb-8 flex items-start justify-between">
+    <div class="mb-8">
+        <flux:breadcrumbs>
+            <flux:breadcrumbs.item href="{{ route('products.index') }}">Products</flux:breadcrumbs.item>
+            <flux:breadcrumbs.item>{{ $product->name }}</flux:breadcrumbs.item>
+        </flux:breadcrumbs>
+        
+        <div class="mt-4 flex items-center justify-between">
+        
         <div>
             <div class="mb-2 flex items-center gap-3">
                 <flux:heading size="xl">{{ $product->name }}</flux:heading>
@@ -282,6 +289,7 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
             </flux:button>
         </div>
     </div>
+</div>
 
     <div class="grid gap-8 lg:grid-cols-3">
         <div class="lg:col-span-2 space-y-8">
@@ -296,7 +304,7 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
                     
                     <div>
                         <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Base Price</flux:text>
-                        <flux:heading size="lg" class="mt-1">${{ number_format($product->base_price, 2) }}</flux:heading>
+                        <flux:heading size="lg" class="mt-1">{{ formatMoney($product->base_price) }}</flux:heading>
                     </div>
                     
                     <div>
@@ -371,7 +379,7 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
                                         @endif
                                     </flux:table.cell>
                                     <flux:table.cell>
-                                        <flux:badge color="green" size="sm" inset="top bottom">${{ number_format($slot->price, 2) }}</flux:badge>
+                                        <flux:badge color="green" size="sm" inset="top bottom">{{ formatMoney($slot->price) }}</flux:badge>
                                     </flux:table.cell>
                                     <flux:table.cell class="text-zinc-500 italic text-sm">
                                         {{ Str::limit($slot->notes, 30) ?: '-' }}
@@ -418,13 +426,13 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
                     <div class="text-center rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
                         <flux:text class="font-semibold text-green-900 dark:text-green-100">Available</flux:text>
                         <flux:heading size="xl" class="text-green-800 dark:text-green-200">{{ $availableCount }}</flux:heading>
-                        <flux:text size="sm" class="text-green-600 dark:text-green-400">${{ number_format($availableRevenue, 0) }} potential</flux:text>
+                        <flux:text size="sm" class="text-green-600 dark:text-green-400">{{ formatMoney($availableRevenue) }} potential</flux:text>
                     </div>
                     
                     <div class="text-center rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
                         <flux:text class="font-semibold text-blue-900 dark:text-blue-100">Booked</flux:text>
                         <flux:heading size="xl" class="text-blue-800 dark:text-blue-200">{{ $bookedCount }}</flux:heading>
-                        <flux:text size="sm" class="text-blue-600 dark:text-blue-400">${{ number_format($projectedRevenue, 0) }} confirmed</flux:text>
+                        <flux:text size="sm" class="text-blue-600 dark:text-blue-400">{{ formatMoney($projectedRevenue) }} confirmed</flux:text>
                     </div>
                 </div>
                 
@@ -436,7 +444,7 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
                     
                     <div class="flex items-center justify-between border-t pt-3">
                         <flux:text class="font-medium">Total Revenue Potential</flux:text>
-                        <flux:heading size="lg" class="text-green-600">${{ number_format($projectedRevenue + $availableRevenue, 0) }}</flux:heading>
+                        <flux:heading size="lg" class="text-green-600">{{ formatMoney($projectedRevenue + $availableRevenue) }}</flux:heading>
                     </div>
                 </div>
             </div>

@@ -20,6 +20,10 @@
                         <flux:sidebar.item icon="cube" :href="route('products.index')" :current="request()->routeIs('products.*')" wire:navigate>
                             {{ __('Products') }}
                         </flux:sidebar.item>
+                        
+                        <flux:sidebar.item icon="calendar-days" :href="route('bookings.index')" :current="request()->routeIs('bookings.*')" wire:navigate>
+                            {{ __('Bookings') }}
+                        </flux:sidebar.item>
                     @endif
                 </flux:sidebar.group>
             </flux:sidebar.nav>

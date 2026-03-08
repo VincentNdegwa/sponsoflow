@@ -58,6 +58,11 @@ class Workspace extends Model
         return $this->hasMany(Product::class);
     }
 
+    public function bookings()
+    {
+        return $this->hasMany(Booking::class);
+    }
+
     public function paymentConfigurations(): HasMany
     {
         return $this->hasMany(PaymentConfiguration::class);
@@ -87,7 +92,6 @@ class Workspace extends Model
         return $this->type === 'brand';
     }
 
-
     public function getRecommendedProvider(string $brandCountry = 'global'): string
     {
         return CurrencySupport::getRecommendedProvider($this->country_code, $brandCountry);
@@ -97,7 +101,6 @@ class Workspace extends Model
     {
         return CurrencySupport::formatCurrency($amount, $this->currency);
     }
-
 
     public function getAvailableProviders(): array
     {
@@ -109,22 +112,23 @@ class Workspace extends Model
         return CurrencySupport::isCurrencySupportedByProvider($this->currency, $provider);
     }
 
-    public function getSupportedBanks(string $provider = null): array
+    public function getSupportedBanks(?string $provider = null): array
     {
         $provider = $provider ?: $this->getRecommendedProvider();
-        
+
         if ($provider === 'paystack') {
             $paystackProvider = app(\App\Services\Providers\PaystackPaymentProvider::class);
+
             return $paystackProvider->getSupportedBanks($this->country_code);
         }
-        
+
         return []; // Stripe doesn't provide bank list endpoint
     }
 
     /**
      * Format date using workspace's format
      */
-    public function formatDate(\Carbon\Carbon $date): string
+    public function formatDate(\Carbon\CarbonInterface $date): string
     {
         return $date->setTimezone($this->timezone)->format($this->date_format);
     }
@@ -132,7 +136,7 @@ class Workspace extends Model
     /**
      * Format time using workspace's format
      */
-    public function formatTime(\Carbon\Carbon $time): string
+    public function formatTime(\Carbon\CarbonInterface $time): string
     {
         return $time->setTimezone($this->timezone)->format($this->time_format);
     }
@@ -161,7 +165,7 @@ class Workspace extends Model
      */
     public function needsOnboarding(): bool
     {
-        return !$this->hasCompletedOnboarding() && $this->isCreator();
+        return ! $this->hasCompletedOnboarding() && $this->isCreator();
     }
 
     /**
@@ -169,7 +173,7 @@ class Workspace extends Model
      */
     public function hasLocalizationConfigured(): bool
     {
-        return !empty($this->country_code) && !empty($this->currency);
+        return ! empty($this->country_code) && ! empty($this->currency);
     }
 
     /**
@@ -178,6 +182,7 @@ class Workspace extends Model
     public function hasPaymentConfigured(): bool
     {
         $recommendedProvider = $this->getRecommendedProvider();
+
         return $this->activePaymentConfiguration($recommendedProvider) !== null;
     }
 
