@@ -113,8 +113,7 @@ class BookingService
             $product = $slots->first()->product;
             $totalAmount = $slots->sum('price');
 
-            // Check if workspace can receive payments
-            if (! $workspace->canReceivePayments()) {
+            if (! $workspace->canReceivePayments('paystack')) {
                 return $this->errorResponse('Payment processing not available for this creator');
             }
 

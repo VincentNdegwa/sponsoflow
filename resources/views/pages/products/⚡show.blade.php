@@ -465,7 +465,7 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
                                         {{ $slot->slot_date->format('M j') }}
                                     </flux:table.cell>
                                     <flux:table.cell>
-                                        <flux:badge variant="{{ $slot->status->variant() }}" size="sm">
+                                        <flux:badge color="{{ $slot->status->badgeColor() }}" size="sm">
                                             {{ $slot->status->label() }}
                                         </flux:badge>
                                     </flux:table.cell>

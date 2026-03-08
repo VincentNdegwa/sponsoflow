@@ -21,7 +21,7 @@ enum SlotStatus: string
         };
     }
 
-    public function color(): string
+    public function badgeColor(): string
     {
         return match($this) {
             self::Available => 'green',

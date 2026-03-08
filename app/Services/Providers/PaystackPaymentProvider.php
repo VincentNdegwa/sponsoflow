@@ -151,10 +151,18 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                     ),
                 ]);
 
-                // Update booking status
                 $payment->booking->update([
                     'status' => BookingStatus::CONFIRMED,
                 ]);
+
+                $slot = $payment->booking->slot;
+                if ($slot) {
+                    $slot->update([
+                        'status' => \App\Enums\SlotStatus::Booked,
+                        'reserved_until' => null,
+                    ]);
+                }
+
 
                 Log::info('Paystack payment confirmed for booking', [
                     'booking_id' => $payment->booking_id,

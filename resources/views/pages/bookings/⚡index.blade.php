@@ -73,7 +73,7 @@ new #[Layout('layouts::app'), Title('Bookings')] class extends Component {
     {
         if ($this->selectedBooking) {
             $this->selectedBooking->update([
-                'status' => BookingStatus::CONFIRMED
+                'status' => BookingStatus::PENDING_PAYMENT
             ]);
             
             $this->dispatch('success', 'Booking approved successfully!');
