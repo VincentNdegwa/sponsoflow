@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\Slot;
 use App\Models\Booking;
 use App\Models\Workspace;
+use App\Services\BookingService;
 use App\Enums\SlotStatus;
 use App\Enums\BookingType;
 use App\Enums\BookingStatus;
@@ -16,7 +17,6 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Http;
 use Livewire\WithFileUploads;
 
 new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Component {
@@ -216,33 +216,31 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
         $this->errorMessage = null;
 
         try {
-            $payload = [
+            $data = [
+                'creator' => $this->user,
                 'slot_ids' => $this->selectedSlots,
                 'requirement_data' => $this->requirementData,
-                'booking_type' => 'instant',
             ];
             
             if ($this->isGuestUser) {
-                $payload['guest_data'] = $this->guestData;
+                $data['guest_data'] = $this->guestData;
             } else {
-                $payload['brand_user_id'] = $this->brandUser->id;
-                $payload['brand_workspace_id'] = $this->brandWorkspace?->id;
+                $data['brand_user_id'] = $this->brandUser->id;
+                $data['brand_workspace_id'] = $this->brandWorkspace?->id;
             }
             
-            $response = Http::post(route('creator.checkout', $this->user->public_slug), $payload);
+            $result = app(BookingService::class)->createInstantBooking($data);
 
-            if ($response->successful()) {
-                $data = $response->json();
-                if (isset($data['checkout_url'])) {
-                    $this->redirect($data['checkout_url'], navigate: false);
+            if ($result['success']) {
+                if (isset($result['checkout_url'])) {
+                    $this->redirect($result['checkout_url'], navigate: false);
                 } else {
                     $this->errorMessage = 'Payment setup failed. Please try again.';
                 }
             } else {
-                $responseData = $response->json();
-                $this->errorMessage = $responseData['error'] ?? 'Payment processing failed. Please try again.';
+                $this->errorMessage = $result['error'] ?? 'Payment processing failed. Please try again.';
             }
-        } catch (\Exception) {
+        } catch (\Exception $e) {
             $this->errorMessage = 'An unexpected error occurred. Please try again.';
         } finally {
             $this->isProcessing = false;
@@ -258,8 +256,8 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
         
         $validation = [
             'guestData.budget' => 'required|numeric|min:1',
-            'guestData.pitch' => 'required|string|min:20',
-            'guestData.campaign_goals' => 'required|string|min:10',
+            'guestData.pitch' => 'required|string',
+            'guestData.campaign_goals' => 'required|string',
         ];
         
         if ($this->isGuestUser) {
@@ -273,8 +271,8 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
         $this->errorMessage = null;
 
         try {
-            $payload = [
-                'slot_ids' => [],
+            $data = [
+                'creator' => $this->user,
                 'product_id' => $this->selectedProductId,
                 'requirement_data' => [
                     'pitch' => $this->guestData['pitch'],
@@ -285,27 +283,25 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
                     'timeline_end' => $this->guestData['timeline_end'],
                     'budget' => $this->guestData['budget'],
                 ],
-                'booking_type' => 'inquiry',
             ];
             
             if ($this->isGuestUser) {
-                $payload['guest_data'] = $this->guestData;
+                $data['guest_data'] = $this->guestData;
             } else {
-                $payload['brand_user_id'] = $this->brandUser->id;
-                $payload['brand_workspace_id'] = $this->brandWorkspace?->id;
+                $data['brand_user_id'] = $this->brandUser->id;
+                $data['brand_workspace_id'] = $this->brandWorkspace?->id;
             }
             
-            $response = Http::post(route('creator.checkout', $this->user->public_slug), $payload);
+            $result = app(BookingService::class)->createInquiry($data);
 
-            if ($response->successful()) {
+            if ($result['success']) {
                 $this->showBookingDrawer = false;
                 $this->reset(['guestData', 'selectedSlots', 'selectedProductId']);
                 session()->flash('success', 'Your collaboration proposal has been sent successfully! The creator typically responds within 24 hours.');
             } else {
-                $responseData = $response->json();
-                $this->errorMessage = $responseData['error'] ?? 'Failed to submit inquiry. Please try again.';
+                $this->errorMessage = $result['error'] ?? 'Failed to submit inquiry. Please try again.';
             }
-        } catch (\Exception) {
+        } catch (\Exception $e) {
             $this->errorMessage = 'An unexpected error occurred. Please try again.';
         } finally {
             $this->isProcessing = false;
@@ -562,7 +558,6 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
                             @endif
                         </div>
                     @else
-                        {{-- No slots available - show inquiry only --}}
                         <div
                             class="text-center py-16 border-2 border-dashed border-zinc-300 dark:border-zinc-600 rounded-xl">
                             <flux:icon.chat-bubble-left-right class="w-12 h-12 mx-auto text-zinc-400 mb-4" />

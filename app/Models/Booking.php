@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-use App\Enums\BookingType;
 use App\Enums\BookingStatus;
+use App\Enums\BookingType;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Builder;
 
 class Booking extends Model
 {
@@ -17,6 +17,7 @@ class Booking extends Model
         'creator_id',
         'brand_user_id',
         'brand_workspace_id',
+        'workspace_id',
         'type',
         'guest_email',
         'guest_name',
@@ -41,7 +42,6 @@ class Booking extends Model
         ];
     }
 
-
     public function slot(): BelongsTo
     {
         return $this->belongsTo(Slot::class);
@@ -55,6 +55,11 @@ class Booking extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_id');
+    }
+
+    public function workspace(): BelongsTo
+    {
+        return $this->belongsTo(Workspace::class);
     }
 
     public function brandUser(): BelongsTo
@@ -97,12 +102,10 @@ class Booking extends Model
         return $this->type === BookingType::INSTANT;
     }
 
-
     public function isInquiry(): bool
     {
         return $this->type === BookingType::INQUIRY;
     }
-
 
     public function hasSlot(): bool
     {
@@ -121,8 +124,8 @@ class Booking extends Model
         $user = User::firstOrCreate(
             ['email' => $email],
             [
-                'name' => $name, 
-                'password' => bcrypt(\Illuminate\Support\Str::random(32))
+                'name' => $name,
+                'password' => bcrypt(\Illuminate\Support\Str::random(32)),
             ]
         );
 
@@ -132,9 +135,9 @@ class Booking extends Model
             ->where('type', 'brand')
             ->first();
 
-        if (!$workspace) {
+        if (! $workspace) {
             $workspace = $user->workspaces()->create([
-                'name' => $name . "'s Brand Space",
+                'name' => $name."'s Brand Space",
                 'type' => 'brand',
                 'personal_team' => true,
             ]);
@@ -144,14 +147,14 @@ class Booking extends Model
         $payment = BookingPayment::where('session_id', $session['id'])
             ->orWhere('provider_reference', $session['id'])
             ->first();
-            
-        if (!$payment) {
-            throw new \Exception('Payment record not found for session: ' . $session['id']);
+
+        if (! $payment) {
+            throw new \Exception('Payment record not found for session: '.$session['id']);
         }
-        
+
         $booking = $payment->booking;
-        
-        // 4. Finalize the Booking  
+
+        // 4. Finalize the Booking
         $booking->update([
             'brand_user_id' => $user->id,
             'brand_workspace_id' => $workspace->id,
@@ -165,6 +168,7 @@ class Booking extends Model
     {
         return $query->where('type', BookingType::INQUIRY);
     }
+
     public function scopeInstant(Builder $query): Builder
     {
         return $query->where('type', BookingType::INSTANT);
@@ -175,12 +179,10 @@ class Booking extends Model
         return $query->where('status', BookingStatus::CONFIRMED);
     }
 
-
     public function isInquiryStatus(): bool
     {
         return $this->status === BookingStatus::INQUIRY;
     }
-
 
     public function isConfirmed(): bool
     {
@@ -192,9 +194,9 @@ class Booking extends Model
         $parts = array_filter([
             $this->guest_name,
             $this->guest_company,
-            $this->guest_email
+            $this->guest_email,
         ]);
-        
+
         return implode(' • ', $parts);
     }
 }

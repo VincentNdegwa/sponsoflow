@@ -13,6 +13,7 @@ return new class extends Migration
             $table->foreignId('slot_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('product_id')->constrained()->onDelete('cascade');
             $table->foreignId('creator_id')->constrained('users')->onDelete('cascade');
+            $table->foreignId('workspace_id')->constrained('workspaces')->onDelete('cascade');
             $table->foreignId('brand_user_id')->nullable()->constrained('users')->onDelete('set null');
             $table->foreignId('brand_workspace_id')->nullable()->constrained('workspaces')->onDelete('set null');
             $table->string('type')->default('instant');
