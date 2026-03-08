@@ -4,9 +4,6 @@ namespace App\Support;
 
 class CurrencySupport
 {
-    /**
-     * Supported currencies with their details
-     */
     public static function getSupportedCurrencies(): array
     {
         return [
@@ -61,9 +58,6 @@ class CurrencySupport
         ];
     }
 
-    /**
-     * Get supported countries with their details
-     */
     public static function getSupportedCountries(): array
     {
         return [
@@ -124,102 +118,85 @@ class CurrencySupport
         ];
     }
 
-    /**
-     * Get the recommended provider based on creator and brand countries
-     */
     public static function getRecommendedProvider(string $creatorCountry, string $brandCountry = 'global'): string
     {
         $countries = self::getSupportedCountries();
-        
+
         $africanCountries = ['NG', 'GH', 'ZA', 'KE'];
         $westernCountries = ['US', 'CA', 'GB', 'DE', 'FR'];
-        
+
         if (in_array($creatorCountry, $africanCountries)) {
             return 'paystack';
         }
-        
+
         if (in_array($creatorCountry, $westernCountries)) {
             return 'stripe';
         }
-        
+
         if (isset($countries[$creatorCountry])) {
             $providers = $countries[$creatorCountry]['providers'];
-            return $providers[0]; // Return first preferred provider
+
+            return $providers[0];
         }
-        
+
         return 'stripe';
     }
 
-    /**
-     * Format currency amount
-     */
     public static function formatCurrency(float $amount, string $currency, string $locale = 'en_US'): string
     {
         $currencies = self::getSupportedCurrencies();
-        
-        if (!isset($currencies[$currency])) {
+
+        if (! isset($currencies[$currency])) {
             return number_format($amount, 2);
         }
-        
+
         $currencyData = $currencies[$currency];
         $symbol = $currencyData['symbol'];
         $decimals = $currencyData['decimal_places'];
-        
-        // Format based on currency
+
         switch ($currency) {
             case 'NGN':
             case 'GHS':
             case 'ZAR':
             case 'KES':
-                return $symbol . number_format($amount, $decimals);
+                return $symbol.number_format($amount, $decimals);
             case 'EUR':
-                return number_format($amount, $decimals) . ' ' . $symbol;
+                return number_format($amount, $decimals).' '.$symbol;
             default:
-                return $symbol . number_format($amount, $decimals);
+                return $symbol.number_format($amount, $decimals);
         }
     }
 
-    /**
-     * Convert currency to smallest unit (cents, kobo, etc.)
-     */
     public static function toSmallestUnit(float $amount, string $currency): int
     {
         $currencies = self::getSupportedCurrencies();
         $decimals = $currencies[$currency]['decimal_places'] ?? 2;
+
         return (int) ($amount * (10 ** $decimals));
     }
 
-    /**
-     * Convert from smallest unit back to major currency unit
-     */
     public static function fromSmallestUnit(int $amount, string $currency): float
     {
         $currencies = self::getSupportedCurrencies();
         $decimals = $currencies[$currency]['decimal_places'] ?? 2;
+
         return $amount / (10 ** $decimals);
     }
 
-    /**
-     * Get default currency for a country
-     */
     public static function getDefaultCurrency(string $countryCode): string
     {
         $countries = self::getSupportedCountries();
+
         return $countries[$countryCode]['currency'] ?? 'USD';
     }
 
-    /**
-     * Get available providers for a country
-     */
     public static function getAvailableProviders(string $countryCode): array
     {
         $countries = self::getSupportedCountries();
+
         return $countries[$countryCode]['providers'] ?? ['stripe'];
     }
 
-    /**
-     * Check if a currency is supported by a provider
-     */
     public static function isCurrencySupportedByProvider(string $currency, string $provider): bool
     {
         $supportedCurrencies = [

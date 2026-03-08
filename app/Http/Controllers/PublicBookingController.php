@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Enums\BookingStatus;
 use App\Enums\BookingType;
 use App\Models\Booking;
+use App\Models\Product;
 use App\Models\Slot;
 use App\Models\User;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -50,24 +52,43 @@ class PublicBookingController extends Controller
 
     public function checkout(Request $request, User $user)
     {
-        $request->validate([
+        $authUser = Auth::user();
+        $isGuest = ! $authUser;
+
+        if ($authUser && $authUser->id === $user->id) {
+            return response()->json(['error' => 'Creators cannot book for themselves'], 403);
+        }
+
+        if ($authUser && ! $this->isBrandUser($authUser)) {
+            return response()->json(['error' => 'Only brand users can make bookings'], 403);
+        }
+
+        $baseValidation = [
             'slot_ids' => 'required|array',
             'slot_ids.*' => 'exists:slots,id',
-            'product_id' => 'nullable|exists:products,id', // For inquiries when no slots selected
-            'guest_data' => 'required|array',
-            'guest_data.name' => 'required|string|max:255',
-            'guest_data.email' => 'required|email|max:255',
-            'guest_data.company' => 'nullable|string|max:255',
+            'product_id' => 'nullable|exists:products,id',
             'requirement_data' => 'required|array',
             'booking_type' => 'required|in:instant,inquiry',
-        ]);
+        ];
+
+        if ($isGuest) {
+            $baseValidation['guest_data'] = 'required|array';
+            $baseValidation['guest_data.name'] = 'required|string|max:255';
+            $baseValidation['guest_data.email'] = 'required|email|max:255';
+            $baseValidation['guest_data.company'] = 'nullable|string|max:255';
+        } else {
+            $baseValidation['brand_user_id'] = 'required|exists:users,id';
+            $baseValidation['brand_workspace_id'] = 'nullable|exists:workspaces,id';
+        }
+
+        $request->validate($baseValidation);
 
         $workspace = $user->currentWorkspace();
 
         // Handle inquiries (no specific slots)
         if ($request->booking_type === 'inquiry') {
             $productId = $request->product_id ?? (! empty($request->slot_ids) ? Slot::find($request->slot_ids[0])->product_id : null);
-            
+
             if (! $productId) {
                 return response()->json(['error' => 'Product ID is required for inquiries'], 422);
             }
@@ -84,22 +105,33 @@ class PublicBookingController extends Controller
 
             $totalAmount = $request->requirement_data['budget'] ?? 0;
 
+            $bookingData = [
+                'slot_id' => null,
+                'product_id' => $product->id,
+                'creator_id' => $user->id,
+                'type' => BookingType::INQUIRY,
+                'requirement_data' => $request->requirement_data,
+                'amount_paid' => $totalAmount,
+                'status' => BookingStatus::INQUIRY,
+                'notes' => 'Custom collaboration proposal submitted',
+            ];
+
+            if ($isGuest) {
+                $bookingData['brand_user_id'] = null;
+                $bookingData['brand_workspace_id'] = null;
+                $bookingData['guest_email'] = $request->guest_data['email'];
+                $bookingData['guest_name'] = $request->guest_data['name'];
+                $bookingData['guest_company'] = $request->guest_data['company'] ?? '';
+            } else {
+                $bookingData['brand_user_id'] = $request->brand_user_id;
+                $bookingData['brand_workspace_id'] = $request->brand_workspace_id;
+                $bookingData['guest_email'] = null;
+                $bookingData['guest_name'] = null;
+                $bookingData['guest_company'] = null;
+            }
+
             try {
-                $booking = Booking::create([
-                    'slot_id' => null, // No specific slot for inquiries
-                    'product_id' => $product->id,
-                    'creator_id' => $user->id,
-                    'brand_user_id' => null,
-                    'brand_workspace_id' => null,
-                    'type' => BookingType::INQUIRY,
-                    'guest_email' => $request->guest_data['email'],
-                    'guest_name' => $request->guest_data['name'],
-                    'guest_company' => $request->guest_data['company'] ?? '',
-                    'requirement_data' => $request->requirement_data,
-                    'amount_paid' => $totalAmount,
-                    'status' => BookingStatus::INQUIRY,
-                    'notes' => 'Custom collaboration proposal submitted by brand',
-                ]);
+                $booking = Booking::create($bookingData);
 
                 return response()->json([
                     'success' => true,
@@ -154,32 +186,39 @@ class PublicBookingController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($request, $slots, $product, $user, $totalAmount) {
-                // Create booking record for instant booking
-                $booking = Booking::create([
-                    'slot_id' => $slots->first()->id, // Primary slot for the booking
+            DB::transaction(function () use ($request, $slots, $product, $user, $totalAmount, $isGuest) {
+                $bookingData = [
+                    'slot_id' => $slots->first()->id,
                     'product_id' => $product->id,
                     'creator_id' => $user->id,
-                    'brand_user_id' => null, // Guest booking
-                    'brand_workspace_id' => null,
                     'type' => BookingType::INSTANT,
-                    'guest_email' => $request->guest_data['email'],
-                    'guest_name' => $request->guest_data['name'],
-                    'guest_company' => $request->guest_data['company'] ?? '',
                     'requirement_data' => $request->requirement_data,
                     'amount_paid' => $totalAmount,
                     'status' => BookingStatus::PENDING_PAYMENT,
-                ]);
+                ];
 
-                // Create checkout session
+                if ($isGuest) {
+                    $bookingData['brand_user_id'] = null;
+                    $bookingData['brand_workspace_id'] = null;
+                    $bookingData['guest_email'] = $request->guest_data['email'];
+                    $bookingData['guest_name'] = $request->guest_data['name'];
+                    $bookingData['guest_company'] = $request->guest_data['company'] ?? '';
+                } else {
+                    $bookingData['brand_user_id'] = $request->brand_user_id;
+                    $bookingData['brand_workspace_id'] = $request->brand_workspace_id;
+                    $bookingData['guest_email'] = null;
+                    $bookingData['guest_name'] = null;
+                    $bookingData['guest_company'] = null;
+                }
+
+                $booking = Booking::create($bookingData);
+
                 $checkoutSession = $this->paymentService->createCheckoutSession($booking);
 
-                // Update booking with checkout session ID
                 $booking->update([
                     'stripe_session_id' => $checkoutSession['id'],
                 ]);
 
-                // Mark slots as reserved
                 foreach ($slots as $slot) {
                     $slot->update([
                         'status' => \App\Enums\SlotStatus::Reserved,
@@ -231,5 +270,15 @@ class PublicBookingController extends Controller
     public function cancel()
     {
         return view('public.booking.cancel');
+    }
+
+    private function isBrandUser(User $user): bool
+    {
+        $workspace = $user->currentWorkspace();
+        if ($workspace && $workspace->isBrand()) {
+            return true;
+        }
+
+        return $user->hasRole(['brand-admin', 'brand-contributor']);
     }
 }

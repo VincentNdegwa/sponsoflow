@@ -1,11 +1,11 @@
 <?php
 
+use App\Models\Workspace;
 use Illuminate\Support\Facades\Auth;
 
 if (! function_exists('currentWorkspace')) {
     function currentWorkspace(): ?\App\Models\Workspace
     {
-        // First try to get from app container (set by middleware)
         if (app()->bound('current.workspace')) {
             return app('current.workspace');
         }
@@ -26,84 +26,74 @@ if (! function_exists('isCreatorWorkspace')) {
     function isCreatorWorkspace(): bool
     {
         $workspace = currentWorkspace();
+
         return $workspace && $workspace->isCreator();
     }
 }
 
 if (! function_exists('isBrandWorkspace')) {
-
     function isBrandWorkspace(): bool
     {
         $workspace = currentWorkspace();
+
         return $workspace && $workspace->isBrand();
     }
 }
 
 if (! function_exists('formatMoney')) {
-    /**
-     * Format money amount using current workspace's currency
-     */
-    function formatMoney(float $amount, ?string $currency = null): string
+    function formatMoney(float $amount, ?Workspace $workspace = null, ?string $currency = null): string
     {
-        $workspace = currentWorkspace();
-        
+        if (! isset($workspace)) {
+            $workspace = currentWorkspace();
+        }
+
         if ($currency) {
             return \App\Support\CurrencySupport::formatCurrency($amount, $currency);
         }
-        
+
         if ($workspace) {
             return $workspace->formatCurrency($amount);
         }
-        
-        // Fallback to USD
+
         return \App\Support\CurrencySupport::formatCurrency($amount, 'USD');
     }
 }
 
 if (! function_exists('formatWorkspaceDate')) {
-    /**
-     * Format date using current workspace's format and timezone
-     */
     function formatWorkspaceDate(\Carbon\Carbon $date): string
     {
         $workspace = currentWorkspace();
-        
+
         if ($workspace) {
             return $workspace->formatDate($date);
         }
-        
+
         return $date->format('M d, Y');
     }
 }
 
 if (! function_exists('formatWorkspaceTime')) {
-    /**
-     * Format time using current workspace's format and timezone
-     */
     function formatWorkspaceTime(\Carbon\Carbon $time): string
     {
         $workspace = currentWorkspace();
-        
+
         if ($workspace) {
             return $workspace->formatTime($time);
         }
-        
+
         return $time->format('g:i A');
     }
 }
 
 if (! function_exists('getRecommendedProvider')) {
-    /**
-     * Get recommended payment provider for current workspace
-     */
     function getRecommendedProvider(string $brandCountry = 'global'): string
     {
         $workspace = currentWorkspace();
-        
+
         if ($workspace) {
             return $workspace->getRecommendedProvider($brandCountry);
         }
-        
-        return 'stripe'; // Default fallback
+
+        return 'stripe';
     }
 }
