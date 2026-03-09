@@ -29,13 +29,70 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
     public bool $showDisputeForm = false;
     public bool $showApproveModal = false;
 
+    // Inquiry actions
+    public bool $showRejectModal = false;
+    public bool $showCounterModal = false;
+    public string $rejectionNote = '';
+    public string $counterNote = '';
+    public string $counterAmount = '';
+
     public function mount(Booking $booking): void
     {
-        if ($booking->workspace_id !== Auth::user()->currentWorkspace()->id) {
+        if ($booking->workspace_id !== Auth::user()->currentWorkspace()->id &&
+            $booking->brand_user_id !== Auth::id()) {
             abort(404);
         }
 
-        $this->booking = $booking->load(['product', 'brandUser', 'brandWorkspace', 'slot', 'latestSubmission']);
+        $this->booking = $booking->load(['product.requirements', 'brandUser', 'brandWorkspace', 'slot', 'latestSubmission']);
+    }
+
+    public function approveInquiry(): void
+    {
+        $result = app(BookingService::class)->approveInquiry($this->booking);
+
+        if ($result['success']) {
+            $this->booking->refresh();
+            $this->dispatch('success', 'Inquiry approved — the brand has been emailed a link to complete payment.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+    }
+
+    public function rejectInquiry(): void
+    {
+        $result = app(BookingService::class)->rejectInquiry($this->booking, $this->rejectionNote ?: null);
+
+        if ($result['success']) {
+            $this->booking->refresh();
+            $this->showRejectModal = false;
+            $this->rejectionNote = '';
+            $this->dispatch('success', 'Inquiry rejected — the brand has been notified.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+    }
+
+    public function counterInquiry(): void
+    {
+        $this->validate([
+            'counterAmount' => 'required|numeric|min:1',
+        ]);
+
+        $result = app(BookingService::class)->counterInquiry(
+            $this->booking,
+            (float) $this->counterAmount,
+            $this->counterNote ?: null,
+        );
+
+        if ($result['success']) {
+            $this->booking->refresh();
+            $this->showCounterModal = false;
+            $this->counterAmount = '';
+            $this->counterNote = '';
+            $this->dispatch('success', 'Counter-offer sent — the brand has been notified.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
     }
 
     public function submitWork(): void
@@ -142,6 +199,81 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
 
     <div class="grid gap-8 lg:grid-cols-3">
         <div class="lg:col-span-2 space-y-8">
+
+            @if($this->isCreator() && $booking->canApproveInquiry())
+                <div class="rounded-lg border border-blue-200 bg-blue-50 p-6 dark:border-blue-700 dark:bg-blue-950">
+                    <flux:heading size="lg" class="mb-1">New Inquiry</flux:heading>
+                    <flux:text class="mb-4 text-zinc-600 dark:text-zinc-400">
+                        You have a new inquiry from <strong>{{ $booking->guest_name ?? $booking->brandUser?->name }}</strong>.
+                        Review the details and choose how to respond below.
+                    </flux:text>
+
+                    @if($booking->notes)
+                        <blockquote class="mb-4 border-l-4 border-blue-300 pl-4 italic text-zinc-600 dark:border-blue-600 dark:text-zinc-400">
+                            "{{ $booking->notes }}"
+                        </blockquote>
+                    @endif
+
+                    <div class="mb-4 flex items-center gap-6">
+                        <div>
+                            <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-500">Offered Budget</flux:text>
+                            <flux:heading size="lg">{{ formatMoney($booking->amount_paid) }}</flux:heading>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-3">
+                        <flux:button
+                            wire:click="approveInquiry"
+                            wire:loading.attr="disabled"
+                            variant="primary"
+                            icon="check"
+                        >
+                            <span wire:loading.remove wire:target="approveInquiry">Approve</span>
+                            <span wire:loading wire:target="approveInquiry">Approving…</span>
+                        </flux:button>
+
+                        <flux:button
+                            wire:click="$set('showCounterModal', true)"
+                            variant="filled"
+                            icon="arrow-path"
+                        >
+                            Counter Offer
+                        </flux:button>
+
+                        <flux:button
+                            wire:click="$set('showRejectModal', true)"
+                            variant="danger"
+                            icon="x-mark"
+                        >
+                            Reject
+                        </flux:button>
+                    </div>
+                </div>
+            @endif
+
+            @if($this->isCreator() && $booking->canAcceptCounter())
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-700 dark:bg-amber-950">
+                    <flux:heading size="lg" class="mb-1">Awaiting Brand Response</flux:heading>
+                    <flux:text class="mb-4 text-zinc-600 dark:text-zinc-400">
+                        You sent a counter-offer of <strong>{{ formatMoney($booking->counter_amount) }}</strong> to the brand.
+                        Waiting for them to accept or decline.
+                    </flux:text>
+
+                    @if($booking->creator_notes)
+                        <blockquote class="mb-4 border-l-4 border-amber-300 pl-4 italic text-zinc-600 dark:border-amber-600 dark:text-zinc-400">
+                            "{{ $booking->creator_notes }}"
+                        </blockquote>
+                    @endif
+
+                    <flux:button
+                        wire:click="$set('showRejectModal', true)"
+                        variant="danger"
+                        icon="x-mark"
+                    >
+                        Withdraw &amp; Reject
+                    </flux:button>
+                </div>
+            @endif
 
             @if($this->isCreator() && $booking->canSubmitWork())
                 <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-6 dark:border-indigo-700 dark:bg-indigo-950">
@@ -367,4 +499,6 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
     <x-bookings.approve-work-modal :booking="$booking" />
     <x-bookings.revision-request-modal :booking="$booking" />
     <x-bookings.dispute-modal :booking="$booking" />
+    <x-bookings.reject-inquiry-modal :booking="$booking" />
+    <x-bookings.counter-inquiry-modal :booking="$booking" />
 </div>

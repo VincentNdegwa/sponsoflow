@@ -77,6 +77,11 @@ class Workspace extends Model
             ->first();
     }
 
+    public function ratings(): HasMany
+    {
+        return $this->hasMany(WorkspaceRating::class);
+    }
+
     public function canReceivePayments(string $provider = 'stripe'): bool
     {
         return $this->activePaymentConfiguration($provider)?->canReceivePayments() ?? false;

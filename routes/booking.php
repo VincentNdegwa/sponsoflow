@@ -8,3 +8,4 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::livewire('/review/{token}', 'pages::bookings.guest-review')->name('bookings.guest-review');
+Route::livewire('/inquiry/{token}', 'pages::bookings.inquiry-respond')->name('bookings.inquiry-respond');

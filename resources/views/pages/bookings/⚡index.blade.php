@@ -3,6 +3,7 @@
 use App\Models\Booking;
 use App\Enums\BookingStatus;
 use App\Enums\BookingType;
+use App\Services\BookingService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -17,15 +18,15 @@ new #[Layout('layouts::app'), Title('Bookings')] class extends Component {
     public $sortDirection = 'desc';
     public $statusFilter = 'all';
     public $typeFilter = 'all';
-    
-    // Modal states
+
+    // Modal states — property names must match x-bookings.* component wire:model contracts
     public bool $showApproveModal = false;
     public bool $showRejectModal = false;
-    public bool $showCounterOfferModal = false;
+    public bool $showCounterModal = false;
     public ?Booking $selectedBooking = null;
-    public string $rejectionReason = '';
-    public float $counterOfferAmount = 0;
-    public string $counterOfferMessage = '';
+    public string $rejectionNote = '';
+    public string $counterNote = '';
+    public string $counterAmount = '';
 
     public function sort($column)
     {
@@ -69,16 +70,20 @@ new #[Layout('layouts::app'), Title('Bookings')] class extends Component {
         $this->showApproveModal = true;
     }
 
-    public function approveBooking(): void
+    public function approveInquiry(): void
     {
-        if ($this->selectedBooking) {
-            $this->selectedBooking->update([
-                'status' => BookingStatus::PENDING_PAYMENT
-            ]);
-            
-            $this->dispatch('success', 'Booking approved successfully!');
+        if (! $this->selectedBooking) {
+            return;
         }
-        
+
+        $result = app(BookingService::class)->approveInquiry($this->selectedBooking);
+
+        if ($result['success']) {
+            $this->dispatch('success', 'Inquiry approved — the brand has been emailed a link to complete payment.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+
         $this->resetModals();
     }
 
@@ -88,41 +93,53 @@ new #[Layout('layouts::app'), Title('Bookings')] class extends Component {
         $this->showRejectModal = true;
     }
 
-    public function rejectBooking(): void
+    /** Called by x-bookings.reject-inquiry-modal */
+    public function rejectInquiry(): void
     {
-        if ($this->selectedBooking && $this->rejectionReason) {
-            $this->selectedBooking->update([
-                'status' => BookingStatus::REJECTED,
-                'notes' => $this->rejectionReason
-            ]);
-            
-            $this->dispatch('success', 'Booking rejected.');
+        if (! $this->selectedBooking) {
+            return;
         }
-        
+
+        $result = app(BookingService::class)->rejectInquiry($this->selectedBooking, $this->rejectionNote ?: null);
+
+        if ($result['success']) {
+            $this->dispatch('success', 'Inquiry rejected — the brand has been notified.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+
         $this->resetModals();
     }
 
-    public function confirmCounterOffer(Booking $booking): void
+    public function confirmCounter(Booking $booking): void
     {
         $this->selectedBooking = $booking;
-        $this->counterOfferAmount = $booking->amount_paid;
-        $this->showCounterOfferModal = true;
+        $this->counterAmount = '';
+        $this->counterNote = '';
+        $this->showCounterModal = true;
     }
 
-    public function sendCounterOffer(): void
+    /** Called by x-bookings.counter-inquiry-modal */
+    public function counterInquiry(): void
     {
-        if ($this->selectedBooking && $this->counterOfferAmount && $this->counterOfferMessage) {
-            // Here you would typically create a counter offer record
-            // For now, we'll update the booking with notes
-            $this->selectedBooking->update([
-                'status' => BookingStatus::COUNTER_OFFERED,
-                'notes' => "Counter offer: $" . number_format($this->counterOfferAmount, 2) . " - " . $this->counterOfferMessage,
-                'amount_paid' => $this->counterOfferAmount
-            ]);
-            
-            $this->dispatch('success', 'Counter offer sent successfully!');
+        $this->validate(['counterAmount' => 'required|numeric|min:1']);
+
+        if (! $this->selectedBooking) {
+            return;
         }
-        
+
+        $result = app(BookingService::class)->counterInquiry(
+            $this->selectedBooking,
+            (float) $this->counterAmount,
+            $this->counterNote ?: null,
+        );
+
+        if ($result['success']) {
+            $this->dispatch('success', 'Counter-offer sent — the brand has been notified.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+
         $this->resetModals();
     }
 
@@ -130,11 +147,11 @@ new #[Layout('layouts::app'), Title('Bookings')] class extends Component {
     {
         $this->showApproveModal = false;
         $this->showRejectModal = false;
-        $this->showCounterOfferModal = false;
+        $this->showCounterModal = false;
         $this->selectedBooking = null;
-        $this->rejectionReason = '';
-        $this->counterOfferAmount = 0;
-        $this->counterOfferMessage = '';
+        $this->rejectionNote = '';
+        $this->counterNote = '';
+        $this->counterAmount = '';
     }
 
 
@@ -242,7 +259,7 @@ new #[Layout('layouts::app'), Title('Bookings')] class extends Component {
                                             <flux:menu.item wire:click="confirmApprove({{ $booking->id }})" icon="check" class="text-green-600">
                                                 Approve
                                             </flux:menu.item>
-                                            <flux:menu.item wire:click="confirmCounterOffer({{ $booking->id }})" icon="banknotes" class="text-purple-600">
+                                            <flux:menu.item wire:click="confirmCounter({{ $booking->id }})" icon="banknotes" class="text-purple-600">
                                                 Counter Offer
                                             </flux:menu.item>
                                             <flux:menu.item wire:click="confirmReject({{ $booking->id }})" icon="x-mark" class="text-red-600">
@@ -276,97 +293,32 @@ new #[Layout('layouts::app'), Title('Bookings')] class extends Component {
         </div>
     @endif
 
-    <!-- Approve Booking Modal -->
-    <flux:modal wire:model.self="showApproveModal" class="max-w-md">
+    <flux:modal wire:model.self="showApproveModal" class="md:w-md">
         <div class="space-y-6">
             <div>
-                <flux:heading size="lg">Approve Booking</flux:heading>
-                <flux:text class="mt-2">
-                    Are you sure you want to approve this booking? This action will confirm the collaboration and notify the client.
-                </flux:text>
+                <flux:heading size="lg">Approve Inquiry</flux:heading>
+                <flux:text class="mt-2 text-zinc-500">The brand will be emailed a secure link to fill in requirements and complete payment.</flux:text>
             </div>
 
-            <div class="flex gap-3">
+            <div class="flex gap-2">
                 <flux:spacer />
-                <flux:modal.close>
-                <flux:button variant="ghost">Cancel</flux:button>
-            </flux:modal.close>
-                <flux:button wire:click="approveBooking" variant="primary">
-                    Approve Booking
+                <flux:button variant="ghost" @click="$wire.set('showApproveModal', false)">Cancel</flux:button>
+                <flux:button
+                    variant="primary"
+                    icon="check"
+                    wire:click="approveInquiry"
+                    wire:loading.attr="disabled"
+                    wire:loading.class="opacity-75"
+                >
+                    <span wire:loading.remove wire:target="approveInquiry">Approve</span>
+                    <span wire:loading wire:target="approveInquiry">Approving…</span>
                 </flux:button>
             </div>
         </div>
     </flux:modal>
 
-    <!-- Reject Booking Modal -->
-    <flux:modal wire:model.self="showRejectModal" class="max-w-md">
-        <div class="space-y-6">
-            <div>
-                <flux:heading size="lg">Reject Booking</flux:heading>
-                <flux:text class="mt-2">
-                    Please provide a reason for rejecting this booking. This will be shared with the client.
-                </flux:text>
-            </div>
-
-            <flux:textarea 
-                wire:model="rejectionReason" 
-                label="Rejection Reason" 
-                placeholder="Please explain why you're rejecting this booking..."
-                rows="4"
-                required
-            />
-
-            <div class="flex gap-3">
-                <flux:spacer />
-                <flux:modal.close>
-                    <flux:button variant="ghost">Cancel</flux:button>
-                </flux:modal.close>
-                <flux:button wire:click="rejectBooking" variant="danger" :disabled="!$rejectionReason">
-                    Reject Booking
-                </flux:button>
-            </div>
-        </div>
-    </flux:modal>
-
-    <!-- Counter Offer Modal -->
-    <flux:modal wire:model.self="showCounterOfferModal" class="max-w-lg">
-        <div class="space-y-6">
-            <div>
-                <flux:heading size="lg">Send Counter Offer</flux:heading>
-                <flux:text class="mt-2">
-                    Propose a different amount and terms for this collaboration.
-                </flux:text>
-            </div>
-
-            <div class="space-y-4">
-                <flux:input 
-                    wire:model="counterOfferAmount" 
-                    type="number" 
-                    step="0.01"
-                    min="1"
-                    label="Counter Offer Amount" 
-                    prefix="$"
-                    required
-                />
-
-                <flux:textarea 
-                    wire:model="counterOfferMessage" 
-                    label="Message to Client" 
-                    placeholder="Explain your counter offer and any additional terms..."
-                    rows="4"
-                    required
-                />
-            </div>
-
-            <div class="flex gap-3">
-                <flux:spacer />
-                <flux:modal.close>
-                    <flux:button variant="ghost">Cancel</flux:button>
-                </flux:modal.close>
-                <flux:button wire:click="sendCounterOffer" variant="primary" :disabled="!$counterOfferAmount || !$counterOfferMessage">
-                    Send Counter Offer
-                </flux:button>
-            </div>
-        </div>
-    </flux:modal>
+    @if($selectedBooking)
+        <x-bookings.reject-inquiry-modal :booking="$selectedBooking" />
+        <x-bookings.counter-inquiry-modal :booking="$selectedBooking" />
+    @endif
 </div>

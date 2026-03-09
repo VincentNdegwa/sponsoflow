@@ -35,6 +35,8 @@ class Booking extends Model
         'revision_count',
         'max_revisions',
         'auto_approve_at',
+        'counter_amount',
+        'creator_notes',
     ];
 
     protected function casts(): array
@@ -42,6 +44,7 @@ class Booking extends Model
         return [
             'requirement_data' => 'array',
             'amount_paid' => 'decimal:2',
+            'counter_amount' => 'decimal:2',
             'account_claimed' => 'boolean',
             'claimed_at' => 'datetime',
             'auto_approve_at' => 'datetime',
@@ -100,6 +103,11 @@ class Booking extends Model
         return $this->hasMany(BookingReviewToken::class);
     }
 
+    public function inquiryTokens(): HasMany
+    {
+        return $this->hasMany(BookingInquiryToken::class);
+    }
+
     public function latestPayment(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
         return $this->hasOne(BookingPayment::class)->latest();
@@ -123,6 +131,26 @@ class Booking extends Model
     public function canSubmitWork(): bool
     {
         return in_array($this->status, [BookingStatus::CONFIRMED, BookingStatus::REVISION_REQUESTED]);
+    }
+
+    public function canApproveInquiry(): bool
+    {
+        return $this->status === BookingStatus::INQUIRY;
+    }
+
+    public function canRejectInquiry(): bool
+    {
+        return in_array($this->status, [BookingStatus::INQUIRY, BookingStatus::COUNTER_OFFERED]);
+    }
+
+    public function canCounterInquiry(): bool
+    {
+        return $this->status === BookingStatus::INQUIRY;
+    }
+
+    public function canAcceptCounter(): bool
+    {
+        return $this->status === BookingStatus::COUNTER_OFFERED;
     }
 
     public function canRequestRevision(): bool

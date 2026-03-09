@@ -7,6 +7,7 @@ use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\PaymentConfiguration;
 use App\Models\Workspace;
+use App\Notifications\PaymentReceivedNotification;
 use App\Services\GuestAccountCreationService;
 use App\Services\PaymentProviderInterface;
 use Illuminate\Support\Facades\Http;
@@ -159,6 +160,11 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 }
 
                 $this->handleGuestAccountCreation($payment->booking);
+
+                $booking = $payment->booking->load(['product', 'creator']);
+                if ($booking->creator) {
+                    $booking->creator->notify(new PaymentReceivedNotification($booking));
+                }
 
                 Log::info('Paystack payment confirmed for booking', [
                     'booking_id' => $payment->booking_id,

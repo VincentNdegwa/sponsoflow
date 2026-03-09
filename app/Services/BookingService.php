@@ -5,12 +5,17 @@ namespace App\Services;
 use App\Enums\BookingStatus;
 use App\Enums\BookingType;
 use App\Models\Booking;
+use App\Models\BookingInquiryToken;
 use App\Models\BookingReviewToken;
 use App\Models\BookingSubmission;
 use App\Models\Product;
 use App\Models\Slot;
 use App\Models\User;
 use App\Notifications\DisputeOpenedNotification;
+use App\Notifications\InquiryApprovedNotification;
+use App\Notifications\InquiryCounteredNotification;
+use App\Notifications\InquiryReceivedNotification;
+use App\Notifications\InquiryRejectedNotification;
 use App\Notifications\RevisionRequestedNotification;
 use App\Notifications\WorkApprovedNotification;
 use App\Notifications\WorkSubmittedNotification;
@@ -66,6 +71,8 @@ class BookingService
                 $bookingData['guest_company'] = null;
             }
             $booking = Booking::create($bookingData);
+
+            $booking->creator->notify(new InquiryReceivedNotification($booking));
 
             return $this->successResponse([
                 'message' => 'Your inquiry has been submitted successfully!',
@@ -181,6 +188,106 @@ class BookingService
         }
     }
 
+    public function approveInquiry(Booking $booking): array
+    {
+        if (! $booking->canApproveInquiry()) {
+            return $this->errorResponse('This inquiry cannot be approved at this time.');
+        }
+
+        $booking->update(['status' => BookingStatus::PROCESSING]);
+
+        $token = BookingInquiryToken::generateFor($booking, 'respond');
+        $checkoutUrl = route('bookings.inquiry-respond', ['token' => $token->token]);
+
+        $notifiable = new \Illuminate\Notifications\AnonymousNotifiable;
+        $notifiable->route('mail', $booking->guest_email);
+        \Illuminate\Support\Facades\Notification::send(
+            [$notifiable],
+            new InquiryApprovedNotification($booking, $checkoutUrl),
+        );
+
+        return $this->successResponse(['checkout_url' => $checkoutUrl]);
+    }
+
+    public function rejectInquiry(Booking $booking, ?string $creatorNotes = null): array
+    {
+        if (! $booking->canRejectInquiry()) {
+            return $this->errorResponse('This inquiry cannot be rejected at this time.');
+        }
+
+        $booking->update([
+            'status' => BookingStatus::REJECTED,
+            'creator_notes' => $creatorNotes,
+        ]);
+
+        $notifiable = new \Illuminate\Notifications\AnonymousNotifiable;
+        $notifiable->route('mail', $booking->guest_email);
+        \Illuminate\Support\Facades\Notification::send(
+            [$notifiable],
+            new InquiryRejectedNotification($booking),
+        );
+
+        return $this->successResponse([]);
+    }
+
+    public function counterInquiry(Booking $booking, float $counterAmount, ?string $creatorNotes = null): array
+    {
+        if (! $booking->canCounterInquiry()) {
+            return $this->errorResponse('This inquiry cannot be countered at this time.');
+        }
+
+        $booking->update([
+            'status' => BookingStatus::COUNTER_OFFERED,
+            'counter_amount' => $counterAmount,
+            'creator_notes' => $creatorNotes,
+        ]);
+
+        $token = BookingInquiryToken::generateFor($booking, 'accept_counter');
+        $respondUrl = route('bookings.inquiry-respond', ['token' => $token->token]);
+
+        $notifiable = new \Illuminate\Notifications\AnonymousNotifiable;
+        $notifiable->route('mail', $booking->guest_email);
+        \Illuminate\Support\Facades\Notification::send(
+            [$notifiable],
+            new InquiryCounteredNotification($booking, $respondUrl),
+        );
+
+        return $this->successResponse([]);
+    }
+
+    /**
+     * Brand fulfils their part of an approved (or accepted counter-offer) inquiry:
+     * saves campaign requirements, sets amount if accepting a counter, and creates a payment checkout session.
+     */
+    public function fulfillInquiryBooking(Booking $booking, array $requirementData, bool $acceptingCounter = false): array
+    {
+        $allowedStatuses = $acceptingCounter
+            ? [BookingStatus::COUNTER_OFFERED]
+            : [BookingStatus::PROCESSING];
+
+        if (! in_array($booking->status, $allowedStatuses, true)) {
+            return $this->errorResponse('This booking cannot be fulfilled at this time.');
+        }
+
+        return DB::transaction(function () use ($booking, $requirementData, $acceptingCounter) {
+            $updateData = [
+                'status' => BookingStatus::PENDING_PAYMENT,
+                'requirement_data' => $requirementData,
+            ];
+
+            if ($acceptingCounter) {
+                $updateData['amount_paid'] = $booking->counter_amount;
+            }
+
+            $booking->update($updateData);
+
+            $checkoutSession = $this->paymentService->createCheckoutSession($booking);
+            $booking->update(['stripe_session_id' => $checkoutSession['id']]);
+
+            return $this->successResponse(['checkout_url' => $checkoutSession['url']]);
+        });
+    }
+
     public function submitWork(Booking $booking, ?string $workUrl = null, ?string $screenshotPath = null): array
     {
         if (! $booking->canSubmitWork()) {
@@ -213,11 +320,11 @@ class BookingService
             return $this->errorResponse('This booking cannot be approved at this time.');
         }
 
-        $released = $this->paymentService->releaseFunds($booking);
+        // $released = $this->paymentService->releaseFunds($booking);
 
-        if (! $released) {
-            return $this->errorResponse('Failed to release funds. Please try again.');
-        }
+        // if (! $released) {
+        //     return $this->errorResponse('Failed to release funds. Please try again.');
+        // }
 
         $booking->update([
             'status' => BookingStatus::COMPLETED,
@@ -313,6 +420,34 @@ class BookingService
         }
 
         return $user->hasRole(['brand-admin', 'brand-contributor']);
+    }
+
+    public function submitRating(Booking $booking, int $rating, array $tags = [], ?string $comment = null, ?string $guestEmail = null): array
+    {
+        if ($booking->workspace_id === null) {
+            return $this->errorResponse('No creator workspace found for this booking.');
+        }
+
+        $existingRating = \App\Models\WorkspaceRating::where('booking_id', $booking->id)->first();
+
+        if ($existingRating) {
+            return $this->errorResponse('This booking has already been rated.');
+        }
+
+        $submission = $booking->latestSubmission;
+
+        \App\Models\WorkspaceRating::create([
+            'workspace_id' => $booking->workspace_id,
+            'booking_id' => $booking->id,
+            'booking_submission_id' => $submission?->id,
+            'rating' => $rating,
+            'tags' => $tags ?: null,
+            'comment' => $comment ?: null,
+            'rated_by_guest_email' => $guestEmail,
+            'rated_by_user_id' => $booking->brand_user_id,
+        ]);
+
+        return $this->successResponse([]);
     }
 
     private function successResponse(array $data): array
