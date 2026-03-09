@@ -7,6 +7,7 @@ enum BookingStatus: string
     case PENDING = 'pending';
     case CONFIRMED = 'confirmed';
     case PROCESSING = 'processing';
+    case REVISION_REQUESTED = 'revision_requested';
     case COMPLETED = 'completed';
     case CANCELLED = 'cancelled';
     case DISPUTED = 'disputed';
@@ -17,10 +18,11 @@ enum BookingStatus: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'Pending',
             self::CONFIRMED => 'Confirmed',
-            self::PROCESSING => 'Processing',
+            self::PROCESSING => 'Awaiting Approval',
+            self::REVISION_REQUESTED => 'Revision Requested',
             self::COMPLETED => 'Completed',
             self::CANCELLED => 'Cancelled',
             self::DISPUTED => 'Disputed',
@@ -33,10 +35,11 @@ enum BookingStatus: string
 
     public function badgeColor(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'amber',
             self::CONFIRMED => 'lime',
-            self::PROCESSING => 'blue',
+            self::PROCESSING => 'orange',
+            self::REVISION_REQUESTED => 'fuchsia',
             self::COMPLETED => 'green',
             self::CANCELLED => 'zinc',
             self::DISPUTED => 'red',

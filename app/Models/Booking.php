@@ -9,10 +9,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Booking extends Model
 {
     use HasFactory;
+
     protected $fillable = [
         'slot_id',
         'product_id',
@@ -30,6 +32,9 @@ class Booking extends Model
         'account_claimed',
         'claimed_at',
         'notes',
+        'revision_count',
+        'max_revisions',
+        'auto_approve_at',
     ];
 
     protected function casts(): array
@@ -39,6 +44,7 @@ class Booking extends Model
             'amount_paid' => 'decimal:2',
             'account_claimed' => 'boolean',
             'claimed_at' => 'datetime',
+            'auto_approve_at' => 'datetime',
             'type' => BookingType::class,
             'status' => BookingStatus::class,
         ];
@@ -79,6 +85,21 @@ class Booking extends Model
         return $this->hasMany(BookingPayment::class);
     }
 
+    public function submissions(): HasMany
+    {
+        return $this->hasMany(BookingSubmission::class);
+    }
+
+    public function latestSubmission(): HasOne
+    {
+        return $this->hasOne(BookingSubmission::class)->latestOfMany();
+    }
+
+    public function reviewTokens(): HasMany
+    {
+        return $this->hasMany(BookingReviewToken::class);
+    }
+
     public function latestPayment(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
         return $this->hasOne(BookingPayment::class)->latest();
@@ -97,6 +118,36 @@ class Booking extends Model
     public function getSuccessfulPayment(): ?BookingPayment
     {
         return $this->payments()->completed()->first();
+    }
+
+    public function canSubmitWork(): bool
+    {
+        return in_array($this->status, [BookingStatus::CONFIRMED, BookingStatus::REVISION_REQUESTED]);
+    }
+
+    public function canRequestRevision(): bool
+    {
+        return $this->status === BookingStatus::PROCESSING && $this->revision_count < $this->max_revisions;
+    }
+
+    public function canApprove(): bool
+    {
+        return $this->status === BookingStatus::PROCESSING;
+    }
+
+    public function canDispute(): bool
+    {
+        return $this->status === BookingStatus::PROCESSING && $this->revision_count >= $this->max_revisions;
+    }
+
+    public function revisionsExhausted(): bool
+    {
+        return $this->revision_count >= $this->max_revisions;
+    }
+
+    public function isGuestBooking(): bool
+    {
+        return $this->brand_user_id === null && $this->guest_email !== null;
     }
 
     public function isInstant(): bool

@@ -1,21 +1,123 @@
 <?php
 
+use App\Enums\BookingStatus;
 use App\Models\Booking;
+use App\Services\BookingService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Validate;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 new #[Layout('layouts::app'), Title('Booking Details')] class extends Component {
+    use WithFileUploads;
+
     public Booking $booking;
 
-    public function mount(Booking $booking)
+    #[Validate('nullable|url')]
+    public string $workUrl = '';
+
+    #[Validate('nullable|image|max:5120')]
+    public $screenshot = null;
+
+    public string $revisionNotes = '';
+    public string $disputeReason = '';
+    public bool $showSubmitForm = false;
+    public bool $showRevisionForm = false;
+    public bool $showDisputeForm = false;
+    public bool $showApproveModal = false;
+
+    public function mount(Booking $booking): void
     {
         if ($booking->workspace_id !== Auth::user()->currentWorkspace()->id) {
             abort(404);
         }
-        
-        $this->booking = $booking->load(['product', 'brandUser', 'brandWorkspace', 'slot']);
+
+        $this->booking = $booking->load(['product', 'brandUser', 'brandWorkspace', 'slot', 'latestSubmission']);
+    }
+
+    public function submitWork(): void
+    {
+        $this->validateOnly('workUrl');
+        $this->validateOnly('screenshot');
+
+        if (! $this->workUrl && ! $this->screenshot) {
+            $this->addError('workUrl', 'Please provide a link or a screenshot (or both).');
+            return;
+        }
+
+        $screenshotPath = null;
+        if ($this->screenshot) {
+            $screenshotPath = $this->screenshot->store('booking-screenshots', 'public');
+        }
+
+        $result = app(BookingService::class)->submitWork($this->booking, $this->workUrl ?: null, $screenshotPath);
+
+        if ($result['success']) {
+            $this->booking->refresh()->load(['latestSubmission']);
+            $this->showSubmitForm = false;
+            $this->workUrl = '';
+            $this->screenshot = null;
+            $this->dispatch('success', 'Work submitted! The brand has been notified and has 72 hours to review.');
+        } else {
+            $this->addError('workUrl', $result['error']);
+        }
+    }
+
+    public function approveWork(): void
+    {
+        $result = app(BookingService::class)->approveWork($this->booking);
+
+        if ($result['success']) {
+            $this->booking->refresh();
+            $this->dispatch('success', 'Work approved! Payment has been released to the creator.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+    }
+
+    public function requestRevision(): void
+    {
+        $this->validate(['revisionNotes' => 'required|string|min:10']);
+
+        $result = app(BookingService::class)->requestRevision($this->booking, $this->revisionNotes);
+
+        if ($result['success']) {
+            $this->booking->refresh()->load(['latestSubmission']);
+            $this->showRevisionForm = false;
+            $this->revisionNotes = '';
+            $this->dispatch('success', 'Revision request sent to the creator.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+    }
+
+    public function openDispute(): void
+    {
+        $this->validate(['disputeReason' => 'required|string|min:10']);
+
+        $result = app(BookingService::class)->openDispute($this->booking, $this->disputeReason);
+
+        if ($result['success']) {
+            $this->booking->refresh();
+            $this->showDisputeForm = false;
+            $this->disputeReason = '';
+            $this->dispatch('success', 'Dispute opened. Our team will review within 48 hours.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+    }
+
+    public function isCreator(): bool
+    {
+        return Auth::id() === $this->booking->creator_id;
+    }
+
+    public function isBrandUser(): bool
+    {
+        return Auth::id() === $this->booking->brand_user_id;
     }
 }; ?>
 
@@ -39,9 +141,100 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
     </div>
 
     <div class="grid gap-8 lg:grid-cols-3">
-        <!-- Main Content -->
         <div class="lg:col-span-2 space-y-8">
-            <!-- Guest/Brand Information -->
+
+            @if($this->isCreator() && $booking->canSubmitWork())
+                <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-6 dark:border-indigo-700 dark:bg-indigo-950">
+                    <flux:heading size="lg" class="mb-2">
+                        {{ $booking->status === \App\Enums\BookingStatus::REVISION_REQUESTED ? 'Re-submit Revised Work' : 'Submit Your Work' }}
+                    </flux:heading>
+                    <flux:text class="mb-4 text-zinc-600 dark:text-zinc-400">
+                        {{ $booking->status === \App\Enums\BookingStatus::REVISION_REQUESTED ? 'The brand has requested a revision. Upload the updated version below.' : 'Upload the completed work for the brand to review.' }}
+                    </flux:text>
+
+                    <flux:button
+                        wire:click="$set('showSubmitForm', true)"
+                        variant="primary"
+                        icon="arrow-up-tray"
+                    >
+                        Open Submission Form
+                    </flux:button>
+                </div>
+            @endif
+
+            @if($this->isBrandUser() && $booking->canApprove())
+                <div class="rounded-lg border border-green-200 bg-green-50 p-6 dark:border-green-700 dark:bg-green-950">
+                    <flux:heading size="lg" class="mb-2">Review Submitted Work</flux:heading>
+                    <flux:text class="mb-4 text-zinc-600 dark:text-zinc-400">
+                        The creator has submitted the work. Please review and take action.
+                        @if($booking->auto_approve_at)
+                            Auto-approves in <strong>{{ $booking->auto_approve_at->diffForHumans() }}</strong> if no action is taken.
+                        @endif
+                    </flux:text>
+
+                    <div class="flex flex-wrap gap-3">
+                        <flux:button
+                            wire:click="$set('showApproveModal', true)"
+                            variant="primary"
+                            icon="check"
+                        >
+                            Approve Work
+                        </flux:button>
+
+                        @if($booking->canRequestRevision())
+                            <flux:button
+                                wire:click="$set('showRevisionForm', true)"
+                                variant="filled"
+                                icon="arrow-path"
+                            >
+                                Request Revision
+                                <flux:badge size="sm" class="ml-1">{{ $booking->max_revisions - $booking->revision_count }} left</flux:badge>
+                            </flux:button>
+                        @endif
+
+                        @if($booking->canDispute())
+                            <flux:button
+                                wire:click="$set('showDisputeForm', true)"
+                                variant="danger"
+                                icon="shield-exclamation"
+                            >
+                                Open Dispute
+                            </flux:button>
+                        @endif
+                    </div>
+                </div>
+            @endif
+
+            @if($booking->latestSubmission)
+                <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                    <flux:heading size="lg" class="mb-4">Submitted Work</flux:heading>
+                    <div class="space-y-4">
+                        @if($booking->latestSubmission->work_url)
+                            <div>
+                                <flux:text class="text-sm font-medium text-zinc-500">Content Link</flux:text>
+                                <a href="{{ $booking->latestSubmission->work_url }}" target="_blank" rel="noopener noreferrer"
+                                   class="mt-1 flex items-center gap-1 text-indigo-600 underline dark:text-indigo-400">
+                                    {{ $booking->latestSubmission->work_url }}
+                                    <flux:icon.arrow-top-right-on-square class="h-4 w-4" />
+                                </a>
+                            </div>
+                        @endif
+                        @if($booking->latestSubmission->screenshot_path)
+                            <div>
+                                <flux:text class="text-sm font-medium text-zinc-500 mb-2">Screenshot</flux:text>
+                                <img src="{{ Storage::url($booking->latestSubmission->screenshot_path) }}"
+                                     alt="Work screenshot"
+                                     class="rounded-lg max-w-full border border-zinc-200 dark:border-zinc-600" />
+                            </div>
+                        @endif
+                        <flux:text class="text-xs text-zinc-400">
+                            Submitted {{ $booking->latestSubmission->created_at->diffForHumans() }}
+                            @if($booking->revision_count > 0) &mdash; Revision {{ $booking->revision_count }} of {{ $booking->max_revisions }} @endif
+                        </flux:text>
+                    </div>
+                </div>
+            @endif
+
             <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
                 <flux:heading size="lg" class="mb-4">{{ $booking->brandUser ? 'Brand' : 'Guest' }} Information</flux:heading>
                 
@@ -67,7 +260,6 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                 </div>
             </div>
 
-            <!-- Requirements & Details -->
             @if($booking->requirement_data)
                 <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
                     <flux:heading size="lg" class="mb-4">Campaign Details</flux:heading>
@@ -85,19 +277,15 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                 </div>
             @endif
 
-            <!-- Notes -->
             @if($booking->notes)
                 <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
                     <flux:heading size="lg" class="mb-4">Notes</flux:heading>
-                    
                     <flux:text class="whitespace-pre-wrap">{{ $booking->notes }}</flux:text>
                 </div>
             @endif
         </div>
 
-        <!-- Sidebar -->
         <div class="space-y-6">
-            <!-- Status & Type -->
             <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
                 <flux:heading size="lg" class="mb-4">Booking Status</flux:heading>
                 
@@ -124,10 +312,23 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                         <flux:text class="text-sm font-medium text-zinc-500">Amount</flux:text>
                         <flux:heading class="mt-1">{{ formatMoney($booking->amount_paid) }}</flux:heading>
                     </div>
+
+                    @if($booking->revision_count > 0)
+                        <div>
+                            <flux:text class="text-sm font-medium text-zinc-500">Revisions Used</flux:text>
+                            <flux:text class="mt-1">{{ $booking->revision_count }} / {{ $booking->max_revisions }}</flux:text>
+                        </div>
+                    @endif
+
+                    @if($booking->auto_approve_at && $booking->status === \App\Enums\BookingStatus::PROCESSING)
+                        <div>
+                            <flux:text class="text-sm font-medium text-zinc-500">Auto-Approves</flux:text>
+                            <flux:text class="mt-1">{{ $booking->auto_approve_at->diffForHumans() }}</flux:text>
+                        </div>
+                    @endif
                 </div>
             </div>
 
-            <!-- Slot Information -->
             @if($booking->slot)
                 <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
                     <flux:heading size="lg" class="mb-4">Scheduled Time</flux:heading>
@@ -142,7 +343,6 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                 </div>
             @endif
 
-            <!-- Timeline -->
             <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
                 <flux:heading size="lg" class="mb-4">Timeline</flux:heading>
                 
@@ -162,4 +362,9 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
             </div>
         </div>
     </div>
+
+    <x-bookings.submit-work-modal :booking="$booking" />
+    <x-bookings.approve-work-modal :booking="$booking" />
+    <x-bookings.revision-request-modal :booking="$booking" />
+    <x-bookings.dispute-modal :booking="$booking" />
 </div>

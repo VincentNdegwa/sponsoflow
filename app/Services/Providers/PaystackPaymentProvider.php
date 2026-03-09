@@ -6,7 +6,6 @@ use App\Enums\BookingStatus;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\PaymentConfiguration;
-use App\Models\User;
 use App\Models\Workspace;
 use App\Services\GuestAccountCreationService;
 use App\Services\PaymentProviderInterface;
@@ -17,21 +16,19 @@ use Illuminate\Support\Str;
 class PaystackPaymentProvider implements PaymentProviderInterface
 {
     protected string $baseUrl;
+
     protected string $secretKey;
 
     public function __construct()
     {
         $this->baseUrl = 'https://api.paystack.co';
         $this->secretKey = config('services.paystack.secret_key');
-        
-        if (!$this->secretKey) {
+
+        if (! $this->secretKey) {
             throw new \Exception('Paystack secret key not configured');
         }
     }
 
-    /**
-     * Create a checkout session for a booking with escrow (subaccount split)
-     */
     public function createCheckoutSession(Booking $booking, PaymentConfiguration $config): array
     {
         try {
@@ -39,9 +36,9 @@ class PaystackPaymentProvider implements PaymentProviderInterface
             $currency = $workspace->currency;
             $platformFeePercentage = $config->platform_fee_percentage;
             $creatorPercentage = 100 - $platformFeePercentage;
-            
-            $reference = 'SPONSOR_' . $booking->id . '_' . Str::random(8);
-            
+
+            $reference = 'SPONSOR_'.$booking->id.'_'.Str::random(8);
+
             $payload = [
                 'email' => $booking->guest_email ?? $booking->brandUser->email,
                 'amount' => $this->convertToSmallestUnit($booking->amount_paid, $currency),
@@ -49,7 +46,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'reference' => $reference,
                 'callback_url' => route('payment.paystack.callback'),
                 'subaccount' => $config->provider_account_id,
-                'bearer' => 'subaccount', // Creator pays transaction fees
+                'bearer' => 'subaccount',
                 'transaction_charge' => $this->convertToSmallestUnit(
                     $booking->amount_paid * ($platformFeePercentage / 100),
                     $currency
@@ -67,19 +64,18 @@ class PaystackPaymentProvider implements PaymentProviderInterface
             ];
 
             $response = Http::withToken($this->secretKey)
-                ->post($this->baseUrl . '/transaction/initialize', $payload);
+                ->post($this->baseUrl.'/transaction/initialize', $payload);
 
-            if (!$response->successful()) {
-                throw new \Exception('Paystack API error: ' . $response->body());
+            if (! $response->successful()) {
+                throw new \Exception('Paystack API error: '.$response->body());
             }
 
             $data = $response->json();
 
-            if (!$data['status']) {
-                throw new \Exception('Paystack transaction initialization failed: ' . $data['message']);
+            if (! $data['status']) {
+                throw new \Exception('Paystack transaction initialization failed: '.$data['message']);
             }
 
-            // Create payment record
             $payment = BookingPayment::createForBooking($booking, 'paystack', [
                 'provider_reference' => $reference,
                 'session_id' => $data['data']['access_code'],
@@ -113,26 +109,23 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'error' => $e->getMessage(),
             ]);
 
-            throw new \Exception('Failed to create payment session: ' . $e->getMessage());
+            throw new \Exception('Failed to create payment session: '.$e->getMessage());
         }
     }
 
-    /**
-     * Handle successful payment after checkout
-     */
     public function handleSuccessfulPayment(string $reference): void
     {
         try {
             $response = Http::withToken($this->secretKey)
-                ->get($this->baseUrl . '/transaction/verify/' . $reference);
+                ->get($this->baseUrl.'/transaction/verify/'.$reference);
 
-            if (!$response->successful()) {
-                throw new \Exception('Paystack verification API error: ' . $response->body());
+            if (! $response->successful()) {
+                throw new \Exception('Paystack verification API error: '.$response->body());
             }
 
             $data = $response->json();
 
-            if (!$data['status'] || $data['data']['status'] !== 'success') {
+            if (! $data['status'] || $data['data']['status'] !== 'success') {
                 throw new \Exception('Payment verification failed');
             }
 
@@ -143,7 +136,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                     'provider_transaction_id' => $data['data']['id'],
                     'status' => 'completed',
                     'paid_at' => now(),
-                    'amount' => $this->convertFromSmallestUnit($data['data']['amount'], $payment->currency), // Convert from smallest unit
+                    'amount' => $this->convertFromSmallestUnit($data['data']['amount'], $payment->currency),
                     'provider_data' => array_merge(
                         $payment->provider_data ?? [],
                         [
@@ -184,29 +177,26 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'error' => $e->getMessage(),
             ]);
 
-            throw new \Exception('Failed to process payment confirmation: ' . $e->getMessage());
+            throw new \Exception('Failed to process payment confirmation: '.$e->getMessage());
         }
     }
 
-    /**
-     * Create a subaccount for a creator (Connect account equivalent)
-     */
     public function createConnectAccount(Workspace $workspace, array $bankDetails = []): array
     {
         try {
             if (empty($bankDetails)) {
                 throw new \Exception('Bank details required for subaccount creation');
             }
-            if (!isset($workspace)){
+            if (! isset($workspace)) {
                 $workspace = currentWorkspace();
             }
 
-            if (!isset($bankDetails['account_number']) || !isset($bankDetails['bank_code']) || !isset($bankDetails['account_name'])) {
+            if (! isset($bankDetails['account_number']) || ! isset($bankDetails['bank_code']) || ! isset($bankDetails['account_name'])) {
                 throw new \Exception('Account number, bank code, and account name are required');
             }
 
             $owner = $workspace->owner;
-            if (!$owner) {
+            if (! $owner) {
                 throw new \Exception('No workspace owner found');
             }
 
@@ -224,29 +214,29 @@ class PaystackPaymentProvider implements PaymentProviderInterface
 
             if ($existingConfig && $existingConfig->provider_account_id) {
                 $subaccountCode = $existingConfig->provider_account_id;
-                
+
                 $updatePayload = [
                     'business_name' => $workspace->name,
                     'settlement_bank' => $bankDetails['bank_code'],
                     'account_number' => $bankDetails['account_number'],
                     'percentage_charge' => 90,
-                    'description' => 'Creator subaccount for ' . $workspace->name,
+                    'description' => 'Creator subaccount for '.$workspace->name,
                     'primary_contact_email' => $owner->email,
                     'primary_contact_name' => $owner->name,
                     'settlement_schedule' => 'manual',
                 ];
 
                 $updateResponse = Http::withToken($this->secretKey)
-                    ->put($this->baseUrl . '/subaccount/' . $subaccountCode, $updatePayload);
+                    ->put($this->baseUrl.'/subaccount/'.$subaccountCode, $updatePayload);
 
-                if (!$updateResponse->successful()) {
-                    throw new \Exception('Paystack subaccount update API error: ' . $updateResponse->body());
+                if (! $updateResponse->successful()) {
+                    throw new \Exception('Paystack subaccount update API error: '.$updateResponse->body());
                 }
 
                 $updateData = $updateResponse->json();
 
-                if (!$updateData['status']) {
-                    throw new \Exception('Paystack subaccount update failed: ' . $updateData['message']);
+                if (! $updateData['status']) {
+                    throw new \Exception('Paystack subaccount update failed: '.$updateData['message']);
                 }
 
                 $subaccountId = $updateData['data']['id'] ?? $existingConfig->provider_data['subaccount_id'] ?? null;
@@ -263,24 +253,24 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                     'business_name' => $workspace->name,
                     'settlement_bank' => $bankDetails['bank_code'],
                     'account_number' => $bankDetails['account_number'],
-                    'percentage_charge' => 90, 
-                    'description' => 'Creator subaccount for ' . $workspace->name,
+                    'percentage_charge' => 90,
+                    'description' => 'Creator subaccount for '.$workspace->name,
                     'primary_contact_email' => $owner->email,
                     'primary_contact_name' => $owner->name,
-                    'settlement_schedule' => 'manual', // enables escrow
+                    'settlement_schedule' => 'manual',
                 ];
 
                 $createResponse = Http::withToken($this->secretKey)
-                    ->post($this->baseUrl . '/subaccount', $createPayload);
+                    ->post($this->baseUrl.'/subaccount', $createPayload);
 
-                if (!$createResponse->successful()) {
-                    throw new \Exception('Paystack subaccount creation API error: ' . $createResponse->body());
+                if (! $createResponse->successful()) {
+                    throw new \Exception('Paystack subaccount creation API error: '.$createResponse->body());
                 }
 
                 $createData = $createResponse->json();
 
-                if (!$createData['status']) {
-                    throw new \Exception('Paystack subaccount creation failed: ' . $createData['message']);
+                if (! $createData['status']) {
+                    throw new \Exception('Paystack subaccount creation failed: '.$createData['message']);
                 }
 
                 $subaccountCode = $createData['data']['subaccount_code'];
@@ -320,7 +310,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
             return [
                 'account_id' => $subaccountCode,
                 'account_name' => $bankDetails['account_name'],
-                'onboarding_url' => null, // Paystack doesn't require separate onboarding
+                'onboarding_url' => null,
             ];
         } catch (\Exception $e) {
             Log::error('Failed to create/update Paystack subaccount', [
@@ -328,74 +318,65 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'error' => $e->getMessage(),
             ]);
 
-            throw new \Exception('Failed to create payment account: ' . $e->getMessage());
+            throw new \Exception('Failed to create payment account: '.$e->getMessage());
         }
     }
 
-    /**
-     * Get onboarding URL - Not needed for Paystack subaccounts
-     */
     public function getOnboardingUrl(PaymentConfiguration $config): ?string
     {
-        return null; 
+        return null;
     }
 
-    /**
-     * Check if subaccount is verified - Paystack subaccounts are immediately active
-     */
     public function isAccountVerified(PaymentConfiguration $config): bool
     {
-        if (!$config->provider_account_id) {
+        if (! $config->provider_account_id) {
             return false;
         }
 
-        return $config->is_verified; // Paystack subaccounts are verified upon creation
+        return $config->is_verified;
     }
 
-    /**
-     * Release funds from escrow to creator
-     */
     public function releaseFunds(Booking $booking): bool
     {
         try {
-            $config = $booking->product->workspace->activePaymentConfiguration();
-            
-            if (!$config || $config->provider !== 'paystack') {
-                throw new \Exception('No active Paystack configuration found');
-            }
-
-            // Calculate creator's share (after platform fee)
-            $platformFeeAmount = $booking->amount_paid * ($config->platform_fee_percentage / 100);
-            $creatorAmount = $booking->amount_paid - $platformFeeAmount;
             $workspace = $booking->product->workspace;
 
-            // Create transfer recipient if not exists
-            $recipientCode = $this->createTransferRecipient($config);
+            $config = PaymentConfiguration::where('workspace_id', $workspace->id)
+                ->where('provider', 'paystack')
+                ->where('is_active', true)
+                ->first();
 
-            // Initiate transfer to creator
+            if (! $config) {
+                throw new \Exception("No active Paystack configuration found for workspace {$workspace->id}");
+            }
+
+            $platformFeeAmount = $booking->amount_paid * ($config->platform_fee_percentage / 100);
+            $creatorAmount = $booking->amount_paid - $platformFeeAmount;
+
+            $recipientCode = $this->createTransferRecipient($config, $workspace->currency);
+
             $payload = [
                 'source' => 'balance',
                 'amount' => $this->convertToSmallestUnit($creatorAmount, $workspace->currency),
                 'recipient' => $recipientCode,
                 'reason' => "Sponsorship payout for booking #{$booking->id}",
                 'currency' => $workspace->currency,
-                'reference' => 'RELEASE_' . $booking->id . '_' . Str::random(8),
+                'reference' => 'RELEASE_'.$booking->id.'_'.Str::random(8),
             ];
 
             $response = Http::withToken($this->secretKey)
-                ->post($this->baseUrl . '/transfer', $payload);
+                ->post($this->baseUrl.'/transfer', $payload);
 
-            if (!$response->successful()) {
-                throw new \Exception('Paystack transfer API error: ' . $response->body());
+            if (! $response->successful()) {
+                throw new \Exception('Paystack transfer API error: '.$response->body());
             }
 
             $data = $response->json();
 
-            if (!$data['status']) {
-                throw new \Exception('Paystack transfer failed: ' . $data['message']);
+            if (! $data['status']) {
+                throw new \Exception('Paystack transfer failed: '.$data['message']);
             }
 
-            // Log the successful release
             Log::info('Funds released to creator', [
                 'booking_id' => $booking->id,
                 'transfer_code' => $data['data']['transfer_code'],
@@ -413,40 +394,36 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         }
     }
 
-    /**
-     * Refund payment (handles disputes/rejections)
-     */
     public function refundPayment(Booking $booking, string $reason = 'Work rejected'): bool
     {
         try {
             $payment = $booking->getPaymentFor('paystack');
-            
-            if (!$payment || !$payment->provider_transaction_id) {
+
+            if (! $payment || ! $payment->provider_transaction_id) {
                 throw new \Exception('No Paystack payment found for booking');
             }
 
             $payload = [
                 'transaction' => $payment->provider_transaction_id,
-                'amount' => $this->convertToSmallestUnit($payment->amount, $payment->currency), // Full refund in smallest unit
+                'amount' => $this->convertToSmallestUnit($payment->amount, $payment->currency),
                 'currency' => $payment->currency,
                 'customer_note' => $reason,
                 'merchant_note' => "Refund for booking #{$booking->id}: {$reason}",
             ];
 
             $response = Http::withToken($this->secretKey)
-                ->post($this->baseUrl . '/refund', $payload);
+                ->post($this->baseUrl.'/refund', $payload);
 
-            if (!$response->successful()) {
-                throw new \Exception('Paystack refund API error: ' . $response->body());
+            if (! $response->successful()) {
+                throw new \Exception('Paystack refund API error: '.$response->body());
             }
 
             $data = $response->json();
 
-            if (!$data['status']) {
-                throw new \Exception('Paystack refund failed: ' . $data['message']);
+            if (! $data['status']) {
+                throw new \Exception('Paystack refund failed: '.$data['message']);
             }
 
-            // Update payment record
             $payment->markAsRefunded($reason);
 
             Log::info('Payment refunded', [
@@ -467,16 +444,13 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         }
     }
 
-    /**
-     * Handle guest account creation after successful payment
-     */
     protected function handleGuestAccountCreation(Booking $booking): void
     {
         try {
-            if (!$booking->brand_user_id && $booking->guest_email && $booking->guest_name) {
+            if (! $booking->brand_user_id && $booking->guest_email && $booking->guest_name) {
                 $guestAccountService = app(GuestAccountCreationService::class);
                 $user = $guestAccountService->createAccountForGuest($booking);
-                
+
                 if ($user) {
                     Log::info('Guest account processed after payment', [
                         'booking_id' => $booking->id,
@@ -496,18 +470,18 @@ class PaystackPaymentProvider implements PaymentProviderInterface
     public function verifyBankAccount(string $accountNumber, string $bankCode): array
     {
         $response = Http::withToken($this->secretKey)
-            ->get($this->baseUrl . '/bank/resolve', [
+            ->get($this->baseUrl.'/bank/resolve', [
                 'account_number' => $accountNumber,
                 'bank_code' => $bankCode,
             ]);
-        
+
         Log::info('Paystack verification request', [
-            'account_number' => substr($accountNumber, 0, 4) . '***' . substr($accountNumber, -4),
+            'account_number' => substr($accountNumber, 0, 4).'***'.substr($accountNumber, -4),
             'bank_code' => $bankCode,
-            'secret_key_prefix' => substr($this->secretKey, 0, 7) . '***',
+            'secret_key_prefix' => substr($this->secretKey, 0, 7).'***',
         ]);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             $body = $response->body();
             $message = $body;
             $json = json_decode($body, true);
@@ -518,17 +492,17 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'status' => $response->status(),
                 'response' => $body,
             ]);
-            throw new \Exception('Bank account verification failed: ' . $message);
+            throw new \Exception('Bank account verification failed: '.$message);
         }
 
         $data = $response->json();
 
-        if (!$data['status']) {
+        if (! $data['status']) {
             Log::error('Paystack verification returned error', [
                 'message' => $data['message'] ?? 'Unknown error',
                 'data' => $data,
             ]);
-            throw new \Exception('Invalid bank account details: ' . ($data['message'] ?? 'Unknown error'));
+            throw new \Exception('Invalid bank account details: '.($data['message'] ?? 'Unknown error'));
         }
 
         Log::info('Bank account verified successfully', [
@@ -539,64 +513,87 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         return $data['data'];
     }
 
-    /**
-     * Verify bank account details (protected method for internal use)
-     */
     protected function verifyBankAccountInternal(string $accountNumber, string $bankCode): array
     {
         return $this->verifyBankAccount($accountNumber, $bankCode);
     }
 
-    /**
-     * Get bank name from code
-     */
     protected function getBankName(string $code): string
     {
         try {
             $banks = $this->getSupportedBanks();
             $bank = collect($banks)->firstWhere('code', $code);
+
             return $bank['name'] ?? 'Unknown Bank';
         } catch (\Exception $e) {
             return 'Unknown Bank';
         }
     }
 
-    /**
-     * Create transfer recipient for payout
-     */
-    protected function createTransferRecipient(PaymentConfiguration $config): string
+    protected function createTransferRecipient(PaymentConfiguration $config, string $currency): string
     {
         $providerData = $config->provider_data;
-        
-        // Check if recipient already exists
+
         if (isset($providerData['recipient_code'])) {
             return $providerData['recipient_code'];
         }
 
+        $subaccountResponse = Http::withToken($this->secretKey)
+            ->get($this->baseUrl.'/subaccount/'.$config->provider_account_id);
+
+        if (! $subaccountResponse->successful()) {
+            throw new \Exception('Failed to fetch subaccount from Paystack: '.$subaccountResponse->body());
+        }
+
+        $subaccountData = $subaccountResponse->json();
+
+        if (! $subaccountData['status']) {
+            throw new \Exception('Paystack subaccount fetch failed: '.$subaccountData['message']);
+        }
+
+        $subaccount = $subaccountData['data'];
+
+        $banks = $this->getSupportedBanks($this->resolveBankCountry($currency));
+        $bankCollection = collect($banks);
+
+        $bank = isset($subaccount['bank_id'])
+            ? $bankCollection->firstWhere('id', $subaccount['bank_id'])
+            : null;
+
+        if (! $bank && isset($subaccount['settlement_bank'])) {
+            $bank = $bankCollection->firstWhere('name', $subaccount['settlement_bank']);
+        }
+
+        if (! $bank) {
+            throw new \Exception(
+                'Could not resolve bank code for subaccount '.$config->provider_account_id.
+                '. settlement_bank='.($subaccount['settlement_bank'] ?? 'unknown')
+            );
+        }
+
         $payload = [
             'type' => 'nuban',
-            'name' => $providerData['account_name'],
-            'account_number' => $providerData['account_number'],
-            'bank_code' => $this->extractBankCode($providerData['bank']),
-            'currency' => 'NGN',
+            'name' => $subaccount['account_name'] ?? $providerData['business_name'],
+            'account_number' => $subaccount['account_number'],
+            'bank_code' => $bank['code'],
+            'currency' => $subaccount['currency'] ?? $currency,
         ];
 
         $response = Http::withToken($this->secretKey)
-            ->post($this->baseUrl . '/transferrecipient', $payload);
+            ->post($this->baseUrl.'/transferrecipient', $payload);
 
-        if (!$response->successful()) {
-            throw new \Exception('Transfer recipient creation failed: ' . $response->body());
+        if (! $response->successful()) {
+            throw new \Exception('Transfer recipient creation failed: '.$response->body());
         }
 
         $data = $response->json();
 
-        if (!$data['status']) {
-            throw new \Exception('Transfer recipient creation failed: ' . $data['message']);
+        if (! $data['status']) {
+            throw new \Exception('Transfer recipient creation failed: '.$data['message']);
         }
 
         $recipientCode = $data['data']['recipient_code'];
 
-        // Save recipient code for future use
         $config->update([
             'provider_data' => array_merge($providerData, [
                 'recipient_code' => $recipientCode,
@@ -606,53 +603,41 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         return $recipientCode;
     }
 
-    /**
-     * Extract bank code from bank name (for backward compatibility)
-     */
-    protected function extractBankCode(string $bankName): string
+    protected function resolveBankCountry(string $currency): string
     {
-        // This method is kept for backward compatibility with existing transfer recipients
-        // For new implementations, bank code should be passed directly
-        $bankCodes = [
-            'First Bank of Nigeria' => '011',
-            'Access Bank' => '044',
-            'GTBank' => '058',
-            'Zenith Bank' => '057',
-            'UBA' => '033',
-            // Add more bank mappings as needed
-        ];
-
-        return $bankCodes[$bankName] ?? '011'; // Default to First Bank
+        return match ($currency) {
+            'GHS' => 'GH',
+            'ZAR' => 'ZA',
+            'KES' => 'KE',
+            default => 'NG',
+        };
     }
 
-    /**
-     * Get list of supported banks by country
-     */
     public function getSupportedBanks(string $countryCode = 'NG'): array
     {
         try {
             $countryMapping = [
                 'NG' => 'nigeria',
-                'GH' => 'ghana', 
+                'GH' => 'ghana',
                 'ZA' => 'south africa',
                 'KE' => 'kenya',
             ];
-            
+
             $country = $countryMapping[$countryCode] ?? 'nigeria';
-            
+
             $response = Http::withToken($this->secretKey)
-                ->get($this->baseUrl . '/bank', [
+                ->get($this->baseUrl.'/bank', [
                     'country' => $country,
                 ]);
 
-            if (!$response->successful()) {
-                throw new \Exception('Failed to fetch banks: ' . $response->body());
+            if (! $response->successful()) {
+                throw new \Exception('Failed to fetch banks: '.$response->body());
             }
 
             $data = $response->json();
 
-            if (!$data['status']) {
-                throw new \Exception('Failed to fetch banks: ' . $data['message']);
+            if (! $data['status']) {
+                throw new \Exception('Failed to fetch banks: '.$data['message']);
             }
 
             return $data['data'];
@@ -666,48 +651,23 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         }
     }
 
-    /**
-     * Convert amount to smallest currency unit (kobo, pesewas, cents, etc.)
-     */
     protected function convertToSmallestUnit(float $amount, string $currency): int
     {
-        switch ($currency) {
-            case 'NGN': // Naira to kobo
-            case 'GHS': // Cedi to pesewas  
-            case 'ZAR': // Rand to cents
-            case 'KES': // Shilling to cents
-                return (int) ($amount * 100);
-            default:
-                return (int) ($amount * 100); // Default to 2 decimals
-        }
+        return (int) ($amount * 100);
     }
 
-    /**
-     * Convert from smallest currency unit back to major unit
-     */
     protected function convertFromSmallestUnit(int $amount, string $currency): float
     {
-        switch ($currency) {
-            case 'NGN': // Kobo to Naira
-            case 'GHS': // Pesewas to Cedi
-            case 'ZAR': // Cents to Rand
-            case 'KES': // Cents to Shilling
-                return $amount / 100;
-            default:
-                return $amount / 100; // Default to 2 decimals
-        }
+        return $amount / 100;
     }
 
-    /**
-     * Get available payment channels for a country
-     */
     protected function getAvailableChannels(string $countryCode): array
     {
         $channels = [
             'NG' => ['card', 'bank', 'ussd', 'mobile_money', 'bank_transfer'],
             'GH' => ['card', 'bank', 'mobile_money'],
             'ZA' => ['card', 'bank'],
-            'KE' => ['card', 'bank', 'mobile_money'], // M-Pesa included in mobile_money
+            'KE' => ['card', 'bank', 'mobile_money'],
         ];
 
         return $channels[$countryCode] ?? ['card', 'bank'];

@@ -6,7 +6,6 @@ use App\Models\Booking;
 use App\Models\PaymentConfiguration;
 use App\Models\Workspace;
 use App\Services\Providers\StripePaymentProvider;
-use App\Support\CurrencySupport;
 
 class PaymentService
 {
@@ -17,9 +16,6 @@ class PaymentService
         $this->providers = [
             'stripe' => StripePaymentProvider::class,
             'paystack' => \App\Services\Providers\PaystackPaymentProvider::class,
-            // Future providers can be added here
-            // 'paypal' => PayPalPaymentProvider::class,
-            // 'square' => SquarePaymentProvider::class,
         ];
     }
 
@@ -44,15 +40,15 @@ class PaymentService
         $providerInstance->handleSuccessfulPayment($sessionId);
     }
 
-    public function createConnectAccount(Workspace $workspace, string $provider = null, array $bankDetails = []): array
+    public function createConnectAccount(Workspace $workspace, ?string $provider = null, array $bankDetails = []): array
     {
         // Auto-select best provider if not specified
-        if (!$provider) {
+        if (! $provider) {
             $provider = $workspace->getRecommendedProvider();
         }
-        
+
         // Validate provider supports workspace currency
-        if (!$workspace->supportsProvider($provider)) {
+        if (! $workspace->supportsProvider($provider)) {
             throw new \Exception("Provider '{$provider}' does not support currency '{$workspace->currency}'");
         }
 
@@ -104,13 +100,14 @@ class PaymentService
         return array_keys($this->providers);
     }
 
-    /**
-     * Release funds from escrow to creator (Paystack specific)
-     */
     public function releaseFunds(Booking $booking): bool
     {
         $workspace = $booking->product->workspace;
-        $paymentConfig = $workspace->activePaymentConfiguration();
+        $booking_payment = $booking->latestPayment;
+        if (! $booking_payment) {
+            throw new \Exception('No payment record found for booking: '.$booking->id);
+        }
+        $paymentConfig = $workspace->activePaymentConfiguration($booking_payment->provider);
 
         if (! $paymentConfig) {
             throw new \Exception('No active payment configuration found for workspace: '.$workspace->name);
@@ -125,13 +122,14 @@ class PaymentService
         throw new \Exception("Provider '{$paymentConfig->provider}' does not support fund release");
     }
 
-    /**
-     * Refund payment (handles disputes/rejections)
-     */
     public function refundPayment(Booking $booking, string $reason = 'Work rejected'): bool
     {
         $workspace = $booking->product->workspace;
-        $paymentConfig = $workspace->activePaymentConfiguration();
+        $booking_payment = $booking->latestPayment;
+        if (! $booking_payment) {
+            throw new \Exception('No payment record found for booking: '.$booking->id);
+        }
+        $paymentConfig = $workspace->activePaymentConfiguration($booking_payment->provider);
 
         if (! $paymentConfig) {
             throw new \Exception('No active payment configuration found for workspace: '.$workspace->name);
@@ -146,9 +144,6 @@ class PaymentService
         throw new \Exception("Provider '{$paymentConfig->provider}' does not support refunds");
     }
 
-    /**
-     * Get supported banks for a provider and country
-     */
     public function getSupportedBanks(string $provider = 'paystack', string $countryCode = 'NG'): array
     {
         $providerInstance = $this->getProviderByName($provider);
@@ -160,9 +155,6 @@ class PaymentService
         return [];
     }
 
-    /**
-     * Verify bank account details (Paystack specific)
-     */
     public function verifyBankAccount(string $accountNumber, string $bankCode, string $provider = 'paystack'): array
     {
         $providerInstance = $this->getProviderByName($provider);

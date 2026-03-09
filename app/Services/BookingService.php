@@ -5,11 +5,18 @@ namespace App\Services;
 use App\Enums\BookingStatus;
 use App\Enums\BookingType;
 use App\Models\Booking;
+use App\Models\BookingReviewToken;
+use App\Models\BookingSubmission;
 use App\Models\Product;
 use App\Models\Slot;
 use App\Models\User;
+use App\Notifications\DisputeOpenedNotification;
+use App\Notifications\RevisionRequestedNotification;
+use App\Notifications\WorkApprovedNotification;
+use App\Notifications\WorkSubmittedNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 
 class BookingService
 {
@@ -59,6 +66,7 @@ class BookingService
                 $bookingData['guest_company'] = null;
             }
             $booking = Booking::create($bookingData);
+
             return $this->successResponse([
                 'message' => 'Your inquiry has been submitted successfully!',
                 'booking_id' => $booking->id,
@@ -70,6 +78,7 @@ class BookingService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return $this->errorResponse('Failed to submit inquiry. Please try again.');
         }
     }
@@ -107,7 +116,6 @@ class BookingService
                 return $this->errorResponse('Payment processing not available for this creator');
             }
 
-            // Validate required fields
             foreach ($product->requirements->where('is_required', true) as $requirement) {
                 if (empty($data['requirement_data'][$requirement->id])) {
                     return $this->errorResponse("Required field '{$requirement->name}' is missing");
@@ -173,6 +181,115 @@ class BookingService
         }
     }
 
+    public function submitWork(Booking $booking, ?string $workUrl = null, ?string $screenshotPath = null): array
+    {
+        if (! $booking->canSubmitWork()) {
+            return $this->errorResponse('This booking cannot accept a work submission at this time.');
+        }
+
+        $submission = BookingSubmission::create([
+            'booking_id' => $booking->id,
+            'work_url' => $workUrl,
+            'screenshot_path' => $screenshotPath,
+            'revision_number' => $booking->revision_count,
+            'auto_approve_at' => now()->addHours(72),
+        ]);
+
+        $autoApproveAt = now()->addHours(72);
+
+        $booking->update([
+            'status' => BookingStatus::PROCESSING,
+            'auto_approve_at' => $autoApproveAt,
+        ]);
+
+        $this->notifyBrandWorkSubmitted($booking, $submission);
+
+        return $this->successResponse(['submission_id' => $submission->id]);
+    }
+
+    public function approveWork(Booking $booking): array
+    {
+        if (! $booking->canApprove()) {
+            return $this->errorResponse('This booking cannot be approved at this time.');
+        }
+
+        $released = $this->paymentService->releaseFunds($booking);
+
+        if (! $released) {
+            return $this->errorResponse('Failed to release funds. Please try again.');
+        }
+
+        $booking->update([
+            'status' => BookingStatus::COMPLETED,
+            'auto_approve_at' => null,
+        ]);
+
+        $booking->creator->notify(new WorkApprovedNotification($booking));
+
+        return $this->successResponse([]);
+    }
+
+    public function requestRevision(Booking $booking, string $notes): array
+    {
+        if (! $booking->canRequestRevision()) {
+            return $this->errorResponse('No revisions remaining or booking is not awaiting approval.');
+        }
+
+        $submission = $booking->latestSubmission;
+
+        $submission->update(['revision_notes' => $notes]);
+
+        $booking->increment('revision_count');
+        $booking->update([
+            'status' => BookingStatus::REVISION_REQUESTED,
+            'auto_approve_at' => null,
+        ]);
+
+        $booking->creator->notify(new RevisionRequestedNotification($booking->refresh(), $submission));
+
+        return $this->successResponse([]);
+    }
+
+    public function openDispute(Booking $booking, string $reason): array
+    {
+        if (! $booking->canDispute()) {
+            return $this->errorResponse('A dispute cannot be opened for this booking.');
+        }
+
+        $refunded = $this->paymentService->refundPayment($booking, $reason);
+
+        if (! $refunded) {
+            return $this->errorResponse('Failed to process refund. Please try again.');
+        }
+
+        $booking->update([
+            'status' => BookingStatus::DISPUTED,
+            'auto_approve_at' => null,
+        ]);
+
+        $booking->creator->notify(new DisputeOpenedNotification($booking, $reason));
+
+        if ($booking->brandUser) {
+            $booking->brandUser->notify(new DisputeOpenedNotification($booking, $reason));
+        }
+
+        return $this->successResponse([]);
+    }
+
+    private function notifyBrandWorkSubmitted(Booking $booking, BookingSubmission $submission): void
+    {
+        // if ($booking->isGuestBooking()) {
+        $token = BookingReviewToken::generateFor($booking);
+        $reviewUrl = route('bookings.guest-review', ['token' => $token->token]);
+
+        $guestNotifiable = new \Illuminate\Notifications\AnonymousNotifiable;
+        $guestNotifiable->route('mail', $booking->guest_email);
+        Notification::send([$guestNotifiable], new WorkSubmittedNotification($booking, $submission, $reviewUrl));
+        // } else {
+        //     $booking->brandUser->notify(new WorkSubmittedNotification($booking, $submission));
+        // }
+    }
+
     public function validateBookingAuth(User $creator, ?User $authUser): bool
     {
         if (! $authUser) {
@@ -184,6 +301,7 @@ class BookingService
         if (! $this->isBrandUser($authUser)) {
             return false;
         }
+
         return true;
     }
 
