@@ -38,12 +38,15 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
 
     public function mount(Booking $booking): void
     {
-        if ($booking->workspace_id !== Auth::user()->currentWorkspace()->id &&
+        $workspace = currentWorkspace();
+
+        if ($booking->workspace_id !== $workspace?->id &&
+            $booking->brand_workspace_id !== $workspace?->id &&
             $booking->brand_user_id !== Auth::id()) {
             abort(404);
         }
 
-        $this->booking = $booking->load(['product.requirements', 'brandUser', 'brandWorkspace', 'slot', 'latestSubmission']);
+        $this->booking = $booking->load(['product.requirements', 'product.workspace', 'brandUser', 'brandWorkspace', 'slot', 'latestSubmission', 'creator']);
     }
 
     public function approveInquiry(): void
@@ -174,7 +177,10 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
 
     public function isBrandUser(): bool
     {
-        return Auth::id() === $this->booking->brand_user_id;
+        $workspace = currentWorkspace();
+
+        return Auth::id() === $this->booking->brand_user_id
+            || ($workspace && $workspace->id === $this->booking->brand_workspace_id);
     }
 }; ?>
 
@@ -368,28 +374,53 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
             @endif
 
             <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                <flux:heading size="lg" class="mb-4">{{ $booking->brandUser ? 'Brand' : 'Guest' }} Information</flux:heading>
-                
-                <div class="space-y-4">
-                    <div class="grid gap-6 sm:grid-cols-2">
-                        <div>
-                            <flux:text class="text-sm font-medium text-zinc-500">Name</flux:text>
-                            <flux:text class="mt-1">{{ $booking->brandUser?->name ?? $booking->guest_name }}</flux:text>
-                        </div>
-                        
-                        <div>
-                            <flux:text class="text-sm font-medium text-zinc-500">Email</flux:text>
-                            <flux:text class="mt-1">{{ $booking->brandUser?->email ?? $booking->guest_email }}</flux:text>
-                        </div>
-                        
-                        @if($booking->guest_company || $booking->brandWorkspace?->name)
+                @if($this->isBrandUser())
+                    <flux:heading size="lg" class="mb-4">Creator Information</flux:heading>
+
+                    <div class="space-y-4">
+                        <div class="grid gap-6 sm:grid-cols-2">
                             <div>
-                                <flux:text class="text-sm font-medium text-zinc-500">Company</flux:text>
-                                <flux:text class="mt-1">{{ $booking->guest_company ?? $booking->brandWorkspace?->name }}</flux:text>
+                                <flux:text class="text-sm font-medium text-zinc-500">Name</flux:text>
+                                <flux:text class="mt-1">{{ $booking->creator?->name }}</flux:text>
                             </div>
-                        @endif
+
+                            <div>
+                                <flux:text class="text-sm font-medium text-zinc-500">Email</flux:text>
+                                <flux:text class="mt-1">{{ $booking->creator?->email }}</flux:text>
+                            </div>
+
+                            @if($booking->product?->workspace?->name)
+                                <div>
+                                    <flux:text class="text-sm font-medium text-zinc-500">Workspace</flux:text>
+                                    <flux:text class="mt-1">{{ $booking->product->workspace->name }}</flux:text>
+                                </div>
+                            @endif
+                        </div>
                     </div>
-                </div>
+                @else
+                    <flux:heading size="lg" class="mb-4">{{ $booking->brandUser ? 'Brand' : 'Guest' }} Information</flux:heading>
+
+                    <div class="space-y-4">
+                        <div class="grid gap-6 sm:grid-cols-2">
+                            <div>
+                                <flux:text class="text-sm font-medium text-zinc-500">Name</flux:text>
+                                <flux:text class="mt-1">{{ $booking->brandUser?->name ?? $booking->guest_name }}</flux:text>
+                            </div>
+
+                            <div>
+                                <flux:text class="text-sm font-medium text-zinc-500">Email</flux:text>
+                                <flux:text class="mt-1">{{ $booking->brandUser?->email ?? $booking->guest_email }}</flux:text>
+                            </div>
+
+                            @if($booking->guest_company || $booking->brandWorkspace?->name)
+                                <div>
+                                    <flux:text class="text-sm font-medium text-zinc-500">Company</flux:text>
+                                    <flux:text class="mt-1">{{ $booking->guest_company ?? $booking->brandWorkspace?->name }}</flux:text>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                @endif
             </div>
 
             @if($booking->requirement_data)

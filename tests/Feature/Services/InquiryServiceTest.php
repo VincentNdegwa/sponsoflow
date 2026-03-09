@@ -27,11 +27,11 @@ beforeEach(function () {
     Notification::fake();
 });
 
-test('approveInquiry sets status to confirmed and generates a respond token', function () {
+test('approveInquiry sets status to processing and generates a respond token', function () {
     $result = $this->service->approveInquiry($this->booking);
 
     expect($result['success'])->toBeTrue();
-    expect($this->booking->fresh()->status)->toBe(BookingStatus::CONFIRMED);
+    expect($this->booking->fresh()->status)->toBe(BookingStatus::PROCESSING);
 
     $token = BookingInquiryToken::where('booking_id', $this->booking->id)
         ->where('purpose', 'respond')
@@ -129,7 +129,7 @@ test('fulfillInquiryBooking returns error when status does not allow fulfillment
 });
 
 test('fulfillInquiryBooking updates requirement_data and changes status to pending_payment', function () {
-    $this->booking->update(['status' => BookingStatus::CONFIRMED]);
+    $this->booking->update(['status' => BookingStatus::PROCESSING]);
 
     // Bypass actual payment: swap payment service to avoid real Stripe call
     $mockPayment = Mockery::mock(\App\Services\PaymentService::class);

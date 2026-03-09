@@ -320,12 +320,6 @@ class BookingService
             return $this->errorResponse('This booking cannot be approved at this time.');
         }
 
-        // $released = $this->paymentService->releaseFunds($booking);
-
-        // if (! $released) {
-        //     return $this->errorResponse('Failed to release funds. Please try again.');
-        // }
-
         $booking->update([
             'status' => BookingStatus::COMPLETED,
             'auto_approve_at' => null,
@@ -385,16 +379,16 @@ class BookingService
 
     private function notifyBrandWorkSubmitted(Booking $booking, BookingSubmission $submission): void
     {
-        // if ($booking->isGuestBooking()) {
-        $token = BookingReviewToken::generateFor($booking);
-        $reviewUrl = route('bookings.guest-review', ['token' => $token->token]);
+        if ($booking->brandUser) {
+            $booking->brandUser->notify(new WorkSubmittedNotification($booking, $submission));
+        } else {
+            $token = BookingReviewToken::generateFor($booking);
+            $reviewUrl = route('bookings.guest-review', ['token' => $token->token]);
 
-        $guestNotifiable = new \Illuminate\Notifications\AnonymousNotifiable;
-        $guestNotifiable->route('mail', $booking->guest_email);
-        Notification::send([$guestNotifiable], new WorkSubmittedNotification($booking, $submission, $reviewUrl));
-        // } else {
-        //     $booking->brandUser->notify(new WorkSubmittedNotification($booking, $submission));
-        // }
+            $guestNotifiable = new \Illuminate\Notifications\AnonymousNotifiable;
+            $guestNotifiable->route('mail', $booking->guest_email);
+            Notification::send([$guestNotifiable], new WorkSubmittedNotification($booking, $submission, $reviewUrl));
+        }
     }
 
     public function validateBookingAuth(User $creator, ?User $authUser): bool
