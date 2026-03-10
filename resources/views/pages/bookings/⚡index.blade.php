@@ -265,7 +265,8 @@ new #[Layout('layouts::app'), Title('Bookings')] class extends Component {
             </flux:subheading>
         </div>
         
-        <div class="flex gap-3">
+        <div class="flex items-center gap-3">
+            <flux:button href="{{ route('bookings.create') }}" variant="primary" icon="plus">New Booking</flux:button>
             <!-- Status Filter -->
             <flux:select wire:model.live="statusFilter" placeholder="All Status">
                 <flux:select.option value="all">All Status</flux:select.option>

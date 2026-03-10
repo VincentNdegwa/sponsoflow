@@ -108,6 +108,11 @@ class Booking extends Model
         return $this->hasMany(BookingInquiryToken::class);
     }
 
+    public function inviteTokens(): HasMany
+    {
+        return $this->hasMany(BookingInviteToken::class);
+    }
+
     public function latestPayment(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
         return $this->hasOne(BookingPayment::class)->latest();
@@ -176,6 +181,16 @@ class Booking extends Model
     public function isGuestBooking(): bool
     {
         return $this->brand_user_id === null && $this->guest_email !== null;
+    }
+
+    public function isCreatorInitiated(): bool
+    {
+        return $this->inviteTokens()->exists();
+    }
+
+    public function canPayViaInvite(): bool
+    {
+        return $this->status === BookingStatus::PENDING_PAYMENT;
     }
 
     public function isInstant(): bool

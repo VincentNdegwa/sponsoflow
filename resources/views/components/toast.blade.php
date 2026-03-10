@@ -1,21 +1,36 @@
 <div 
     x-data="{ 
-        show: false, 
+        show: false,
+        _timer: null,
         toast: {{ json_encode(session('toast')) }},
         validationErrors: {{ json_encode($errors->any() ? [
             'type' => 'error',
             'title' => 'Validation Error',
             'message' => $errors->first()
         ] : null) }},
+        showToast(type, message, duration = 5000) {
+            const titles = { success: 'Success', error: 'Error', warning: 'Warning', info: 'Info' };
+            this.toast = { type, title: titles[type] ?? type, message };
+            this.show = true;
+            clearTimeout(this._timer);
+            this._timer = setTimeout(() => this.show = false, duration);
+        },
         init() {
             if (this.toast) {
                 this.show = true;
-                setTimeout(() => this.show = false, 5000);
+                this._timer = setTimeout(() => this.show = false, 5000);
             } else if (this.validationErrors) {
                 this.toast = this.validationErrors;
                 this.show = true;
-                setTimeout(() => this.show = false, 8000);
+                this._timer = setTimeout(() => this.show = false, 8000);
             }
+
+            ['success', 'error', 'warning', 'info'].forEach(type => {
+                window.addEventListener(type, (e) => {
+                    const msg = Array.isArray(e.detail) ? e.detail[0] : (typeof e.detail === 'string' ? e.detail : e.detail?.message ?? '');
+                    this.showToast(type, msg, type === 'error' ? 8000 : 5000);
+                });
+            });
         }
     }"
     x-show="show"
@@ -70,13 +85,13 @@
                     </svg>
                 </div>
                 <div class="ml-3 w-0 flex-1 pt-0.5">
-                    <p class="text-sm font-medium text-gray-900" x-text="toast?.title"></p>
-                    <p class="mt-1 text-sm text-gray-500" x-text="toast?.message"></p>
+                    <p class="text-sm font-medium text-zinc-950 dark:text-zinc-50" x-text="toast?.title"></p>
+                    <p class="mt-1 text-sm text-zinc-500" x-text="toast?.message"></p>
                 </div>
                 <div class="ml-4 flex-shrink-0 flex">
                     <button 
                         @click="show = false"
-                        class="bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        class="bg-white rounded-md inline-flex text-zinc-400 hover:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                     >
                         <span class="sr-only">Close</span>
                         <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">

@@ -6,11 +6,14 @@ use App\Enums\BookingStatus;
 use App\Enums\BookingType;
 use App\Models\Booking;
 use App\Models\BookingInquiryToken;
+use App\Models\BookingInviteToken;
 use App\Models\BookingReviewToken;
 use App\Models\BookingSubmission;
 use App\Models\Product;
 use App\Models\Slot;
 use App\Models\User;
+use App\Models\Workspace;
+use App\Notifications\BookingInviteNotification;
 use App\Notifications\DisputeOpenedNotification;
 use App\Notifications\InquiryApprovedNotification;
 use App\Notifications\InquiryCounteredNotification;
@@ -31,7 +34,7 @@ class BookingService
     {
         try {
             $creator = $data['creator'];
-            $workspace = $creator->currentWorkspace();
+            $workspace = $data['workspace'] ?? $creator->currentWorkspace();
             $productId = $data['product_id'];
             if (! $productId) {
                 return $this->errorResponse('Product ID is required for inquiries');
@@ -94,7 +97,7 @@ class BookingService
     {
         try {
             $creator = $data['creator'];
-            $workspace = $creator->currentWorkspace();
+            $workspace = $data['workspace'] ?? $creator->currentWorkspace();
             $slotIds = $data['slot_ids'];
             $isGuest = ! isset($data['brand_user_id']);
 
@@ -455,5 +458,156 @@ class BookingService
             'success' => false,
             'error' => $message,
         ];
+    }
+
+    public function createCreatorInitiatedBooking(array $data): array
+    {
+        try {
+            $workspace = $data['creator_workspace'];
+            $creator = $workspace->owner;
+
+            $product = Product::where('id', $data['product_id'])
+                ->where('workspace_id', $workspace->id)
+                ->where('is_active', true)
+                ->firstOrFail();
+
+            $bookingData = [
+                'product_id' => $product->id,
+                'creator_id' => $creator->id,
+                'workspace_id' => $workspace->id,
+                'type' => BookingType::INSTANT,
+                'amount_paid' => $data['amount'] ?? $product->base_price,
+                'status' => BookingStatus::PENDING_PAYMENT,
+                'notes' => $data['notes'] ?? null,
+                'max_revisions' => 3,
+                'requirement_data' => [],
+            ];
+
+            if (($data['brand_type'] ?? 'new') === 'existing' && ! empty($data['brand_workspace_id'])) {
+                $brandWorkspace = Workspace::findOrFail($data['brand_workspace_id']);
+                $bookingData['brand_workspace_id'] = $brandWorkspace->id;
+                $bookingData['brand_user_id'] = $brandWorkspace->owner_id;
+            } else {
+                $bookingData['guest_email'] = $data['brand_email'] ?? null;
+                $bookingData['guest_name'] = $data['brand_name'] ?? null;
+                $bookingData['guest_company'] = $data['brand_company'] ?? null;
+            }
+
+            $booking = Booking::create($bookingData);
+
+            $token = BookingInviteToken::generateFor($booking);
+            $inviteUrl = route('bookings.invite', ['token' => $token->token]);
+
+            if (! empty($bookingData['brand_user_id'])) {
+                User::find($bookingData['brand_user_id'])?->notify(
+                    new BookingInviteNotification($booking, $inviteUrl)
+                );
+            }
+
+            return $this->successResponse([
+                'booking_id' => $booking->id,
+                'invite_url' => $inviteUrl,
+                'token' => $token->token,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Creator-initiated booking failed', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->errorResponse('Failed to create booking. Please try again.');
+        }
+    }
+
+    /**
+     * Send the invite email for a creator-initiated booking to the brand's email address.
+     */
+    public function sendBookingInviteEmail(Booking $booking, string $email, string $inviteUrl): void
+    {
+        $notifiable = new \Illuminate\Notifications\AnonymousNotifiable;
+        $notifiable->route('mail', $email);
+        Notification::send([$notifiable], new BookingInviteNotification($booking, $inviteUrl));
+    }
+
+    /**
+     * Brand fulfils a creator-initiated invite: fills requirements and proceeds to payment.
+     */
+    public function fulfillInviteBooking(BookingInviteToken $token, array $requirementData, ?array $brandData = null): array
+    {
+        $booking = $token->booking;
+
+        if (! $booking->canPayViaInvite()) {
+            return $this->errorResponse('This booking cannot be completed at this time.');
+        }
+
+        return DB::transaction(function () use ($booking, $requirementData, $brandData) {
+            $updateData = [];
+
+            if (! empty($requirementData)) {
+                $updateData['requirement_data'] = $requirementData;
+            }
+
+            if ($brandData !== null) {
+                if (! empty($brandData['brand_user_id'])) {
+                    $updateData['brand_user_id'] = $brandData['brand_user_id'];
+                    $updateData['brand_workspace_id'] = $brandData['brand_workspace_id'];
+                    $updateData['guest_email'] = null;
+                    $updateData['guest_name'] = null;
+                    $updateData['guest_company'] = null;
+                } else {
+                    $updateData['guest_name'] = $brandData['guest_name'];
+                    $updateData['guest_email'] = $brandData['guest_email'];
+                    $updateData['guest_company'] = $brandData['guest_company'] ?? null;
+                }
+            }
+
+            if (! empty($updateData)) {
+                $booking->update($updateData);
+            }
+
+            $checkoutSession = $this->paymentService->createCheckoutSession($booking);
+            $booking->update(['stripe_session_id' => $checkoutSession['id']]);
+
+            return $this->successResponse(['checkout_url' => $checkoutSession['url']]);
+        });
+    }
+
+    /**
+     * Brand-initiated instant booking (brand selects creator's slot and pays directly).
+     */
+    public function createBrandInstantBooking(array $data): array
+    {
+        $creatorWorkspace = Workspace::findOrFail($data['creator_workspace_id']);
+        $creator = $creatorWorkspace->owner;
+
+        return $this->createInstantBooking([
+            'creator' => $creator,
+            'workspace' => $creatorWorkspace,
+            'slot_ids' => $data['slot_ids'],
+            'requirement_data' => $data['requirement_data'],
+            'brand_user_id' => $data['brand_user_id'],
+            'brand_workspace_id' => $data['brand_workspace_id'],
+        ]);
+    }
+
+    /**
+     * Brand-initiated inquiry (brand selects creator and sends an inquiry to review).
+     */
+    public function createBrandInquiry(array $data): array
+    {
+        $creatorWorkspace = Workspace::findOrFail($data['creator_workspace_id']);
+        $creator = $creatorWorkspace->owner;
+
+        return $this->createInquiry([
+            'creator' => $creator,
+            'workspace' => $creatorWorkspace,
+            'product_id' => $data['product_id'],
+            'requirement_data' => [
+                'budget' => $data['budget'],
+                'campaign_goals' => $data['campaign_goals'],
+                'pitch' => $data['pitch'],
+            ],
+            'brand_user_id' => $data['brand_user_id'],
+            'brand_workspace_id' => $data['brand_workspace_id'],
+        ]);
     }
 }

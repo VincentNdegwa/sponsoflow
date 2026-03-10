@@ -281,6 +281,34 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                 </div>
             @endif
 
+            @if($this->isCreator() && $booking->status === \App\Enums\BookingStatus::PENDING_PAYMENT && $booking->isCreatorInitiated())
+                @php $inviteToken = $booking->inviteTokens()->latest()->first(); @endphp
+                @if($inviteToken && $inviteToken->isValid())
+                    <div class="rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-700 dark:bg-amber-950">
+                        <flux:heading size="lg" class="mb-1">Awaiting Brand Payment</flux:heading>
+                        <flux:text class="mb-4 text-zinc-600 dark:text-zinc-400">
+                            Share the link below with the brand so they can complete the payment.
+                            The link expires {{ $inviteToken->expires_at->diffForHumans() }}.
+                        </flux:text>
+
+                        @php $inviteUrl = route('bookings.invite', ['token' => $inviteToken->token]); @endphp
+
+                        <div class="flex items-center gap-2">
+                            <flux:input value="{{ $inviteUrl }}" readonly class="font-mono text-sm" />
+                            <flux:button
+                                variant="filled"
+                                icon="clipboard"
+                                x-data
+                                x-on:click="navigator.clipboard.writeText('{{ $inviteUrl }}').then(() => $dispatch('copied'))"
+                                @copied.window="$el.textContent = 'Copied!'; setTimeout(() => $el.innerHTML = '<svg ...></svg>&nbsp;Copy', 2000)"
+                            >
+                                Copy
+                            </flux:button>
+                        </div>
+                    </div>
+                @endif
+            @endif
+
             @if($this->isCreator() && $booking->canSubmitWork())
                 <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-6 dark:border-indigo-700 dark:bg-indigo-950">
                     <flux:heading size="lg" class="mb-2">
