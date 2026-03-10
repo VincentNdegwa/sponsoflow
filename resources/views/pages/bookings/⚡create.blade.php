@@ -834,25 +834,7 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                     @if($selectedSlotId && $this->selectedBrandProduct?->requirements->isNotEmpty())
                         <div class="mb-6">
                             <flux:heading size="md" class="mb-4">Campaign Requirements</flux:heading>
-                            <div class="space-y-4">
-                                @foreach($this->selectedBrandProduct->requirements as $requirement)
-                                    <flux:field>
-                                        <flux:label>
-                                            {{ $requirement->name }}
-                                            @if($requirement->is_required)<span class="text-red-500">*</span>@endif
-                                        </flux:label>
-                                        @if($requirement->description)
-                                            <flux:description>{{ $requirement->description }}</flux:description>
-                                        @endif
-                                        @if($requirement->type === 'textarea')
-                                            <flux:textarea wire:model="requirementData.{{ $requirement->id }}" rows="3" />
-                                        @else
-                                            <flux:input wire:model="requirementData.{{ $requirement->id }}" :type="$requirement->type" />
-                                        @endif
-                                        <flux:error name="requirementData.{{ $requirement->id }}" />
-                                    </flux:field>
-                                @endforeach
-                            </div>
+                            <x-bookings.requirements-form :requirements="$this->selectedBrandProduct->requirements" :empty-state="false" />
                         </div>
                     @endif
 

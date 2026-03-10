@@ -30,6 +30,19 @@ class BookingService
 {
     public function __construct(protected PaymentService $paymentService) {}
 
+    public function validateRequirementData(Product $product, array $data): array
+    {
+        $errors = [];
+
+        foreach ($product->requirements->where('is_required', true) as $requirement) {
+            if (empty($data[$requirement->id])) {
+                $errors["requirementData.{$requirement->id}"] = 'This field is required.';
+            }
+        }
+
+        return $errors;
+    }
+
     public function createInquiry(array $data): array
     {
         try {
@@ -382,7 +395,6 @@ class BookingService
             Notification::send([$guestNotifiable], new WorkSubmittedNotification($booking, $submission, $reviewUrl));
         }
     }
-
 
     private function sendBrandNotification(Booking $booking, \Illuminate\Notifications\Notification $notification): void
     {

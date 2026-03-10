@@ -51,12 +51,12 @@ new #[Layout('layouts::guest'), Title('Complete Your Booking')] class extends Co
             ]);
         }
 
-        foreach ($product->requirements->where('is_required', true) as $requirement) {
-            if (empty($this->requirementData[$requirement->id])) {
-                $this->addError("requirementData.{$requirement->id}", 'This field is required.');
-
-                return;
-            }
+        $validationErrors = app(BookingService::class)->validateRequirementData($product, $this->requirementData);
+        foreach ($validationErrors as $field => $message) {
+            $this->addError($field, $message);
+        }
+        if ($validationErrors) {
+            return;
         }
 
         $this->isProcessing = true;
@@ -102,15 +102,7 @@ new #[Layout('layouts::guest'), Title('Complete Your Booking')] class extends Co
     <div class="mx-auto max-w-2xl px-4 py-12 sm:px-6">
 
         @if($tokenInvalid)
-            <div class="rounded-xl border border-zinc-200 bg-white p-8 text-center shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-                <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 dark:bg-red-950">
-                    <flux:icon.x-circle class="h-7 w-7 text-red-600 dark:text-red-400" />
-                </div>
-                <flux:heading size="xl" class="mb-2">Link Expired or Invalid</flux:heading>
-                <flux:text class="text-zinc-500">
-                    This invite link has already been used or has expired. Please contact the creator if you need a new one.
-                </flux:text>
-            </div>
+            <x-bookings.token-invalid message="This invite link has already been used or has expired. Please contact the creator if you need a new one." />
         @elseif($inviteToken)
             @php $booking = $inviteToken->booking; $product = $booking->product; @endphp
 
@@ -158,84 +150,31 @@ new #[Layout('layouts::guest'), Title('Complete Your Booking')] class extends Co
                     @endif
                 </flux:text>
 
-                <form wire:submit="proceedToPayment" class="space-y-6">
-                    @guest
-                        <div class="space-y-5 rounded-lg border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900">
-                            <flux:heading size="sm" class="mb-1">Your Details</flux:heading>
-                            <div class="grid gap-4 sm:grid-cols-2">
+                <x-bookings.checkout-form :requirements="$product->requirements" action="proceedToPayment" :error="$errorMessage">
+                    <x-slot:guest-fields>
+                        @guest
+                            <div class="space-y-5 rounded-lg border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900">
+                                <flux:heading size="sm" class="mb-1">Your Details</flux:heading>
+                                <div class="grid gap-4 sm:grid-cols-2">
+                                    <flux:field>
+                                        <flux:label>Full name *</flux:label>
+                                        <flux:input wire:model="guestName" placeholder="Jane Smith" />
+                                        <flux:error name="guestName" />
+                                    </flux:field>
+                                    <flux:field>
+                                        <flux:label>Email *</flux:label>
+                                        <flux:input wire:model="guestEmail" type="email" placeholder="jane@brand.com" />
+                                        <flux:error name="guestEmail" />
+                                    </flux:field>
+                                </div>
                                 <flux:field>
-                                    <flux:label>Full name *</flux:label>
-                                    <flux:input wire:model="guestName" placeholder="Jane Smith" />
-                                    <flux:error name="guestName" />
-                                </flux:field>
-                                <flux:field>
-                                    <flux:label>Email *</flux:label>
-                                    <flux:input wire:model="guestEmail" type="email" placeholder="jane@brand.com" />
-                                    <flux:error name="guestEmail" />
+                                    <flux:label>Company (optional)</flux:label>
+                                    <flux:input wire:model="guestCompany" placeholder="Acme Corp" />
                                 </flux:field>
                             </div>
-                            <flux:field>
-                                <flux:label>Company (optional)</flux:label>
-                                <flux:input wire:model="guestCompany" placeholder="Acme Corp" />
-                            </flux:field>
-                        </div>
-                    @endguest
-
-                    @if($product->requirements->isNotEmpty())
-                        <div class="space-y-5">
-                            @foreach($product->requirements as $requirement)
-                                <flux:field>
-                                    <flux:label>
-                                        {{ $requirement->name }}
-                                        @if($requirement->is_required)
-                                            <span class="text-red-500">*</span>
-                                        @endif
-                                    </flux:label>
-
-                                    @if($requirement->description)
-                                        <flux:description>{{ $requirement->description }}</flux:description>
-                                    @endif
-
-                                    @if($requirement->type === 'textarea')
-                                        <flux:textarea
-                                            wire:model="requirementData.{{ $requirement->id }}"
-                                            rows="3"
-                                        />
-                                    @else
-                                        <flux:input
-                                            wire:model="requirementData.{{ $requirement->id }}"
-                                            :type="$requirement->type"
-                                        />
-                                    @endif
-
-                                    <flux:error name="requirementData.{{ $requirement->id }}" />
-                                </flux:field>
-                            @endforeach
-                        </div>
-                    @else
-                        <flux:callout variant="info" icon="information-circle">
-                            <flux:callout.text>No additional information is required. Click below to proceed to payment.</flux:callout.text>
-                        </flux:callout>
-                    @endif
-
-                    @if($errorMessage)
-                        <flux:callout variant="danger" icon="exclamation-triangle">
-                            <flux:callout.text>{{ $errorMessage }}</flux:callout.text>
-                        </flux:callout>
-                    @endif
-
-                    <flux:button
-                        type="submit"
-                        variant="primary"
-                        class="w-full"
-                        icon-trailing="arrow-right"
-                        wire:loading.attr="disabled"
-                        wire:loading.class="opacity-75"
-                    >
-                        <span wire:loading.remove wire:target="proceedToPayment">Proceed to Secure Payment</span>
-                        <span wire:loading wire:target="proceedToPayment">Preparing checkout…</span>
-                    </flux:button>
-                </form>
+                        @endguest
+                    </x-slot:guest-fields>
+                </x-bookings.checkout-form>
             </div>
         @endif
     </div>

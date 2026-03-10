@@ -125,12 +125,12 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
     {
         $product = $this->booking->product;
 
-        foreach ($product->requirements->where('is_required', true) as $requirement) {
-            if (empty($this->requirementData[$requirement->id])) {
-                $this->addError("requirementData.{$requirement->id}", 'This field is required.');
-
-                return;
-            }
+        $validationErrors = app(BookingService::class)->validateRequirementData($product, $this->requirementData);
+        foreach ($validationErrors as $field => $message) {
+            $this->addError($field, $message);
+        }
+        if ($validationErrors) {
+            return;
         }
 
         $this->brandIsProcessing = true;
@@ -347,46 +347,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                             Review the details and choose how to respond.
                         </flux:text>
 
-                        <div class="mb-6 grid gap-4 sm:grid-cols-2">
-                            <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
-                                <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">Your original offer</flux:text>
-                                <p class="mt-1 text-2xl font-bold text-zinc-400 line-through">
-                                    {{ $booking->formatAmount() }}
-                                </p>
-                            </div>
-                            <div class="rounded-lg border border-indigo-200 bg-white p-4 dark:border-indigo-700 dark:bg-indigo-900">
-                                <flux:text class="text-xs font-medium uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Counter-offer</flux:text>
-                                <p class="mt-1 text-2xl font-bold text-indigo-700 dark:text-indigo-300">
-                                    {{ $booking->formatAmount((float) $booking->counter_amount) }}
-                                </p>
-                            </div>
-                        </div>
-
-                        @if($booking->creator_notes)
-                            <blockquote class="mb-6 border-l-4 border-indigo-300 pl-4 italic text-zinc-600 dark:border-indigo-600 dark:text-zinc-400">
-                                "{{ $booking->creator_notes }}"
-                            </blockquote>
-                        @endif
-
-                        <div class="flex flex-wrap gap-3">
-                            <flux:button
-                                wire:click="brandAcceptCounter"
-                                variant="primary"
-                                icon="check"
-                            >
-                                Accept Counter-Offer
-                            </flux:button>
-
-                            <flux:button
-                                wire:click="brandDeclineCounter"
-                                wire:loading.attr="disabled"
-                                variant="danger"
-                                icon="x-mark"
-                            >
-                                <span wire:loading.remove wire:target="brandDeclineCounter">Decline</span>
-                                <span wire:loading wire:target="brandDeclineCounter">Declining…</span>
-                            </flux:button>
-                        </div>
+                        <x-bookings.counter-offer-respond :booking="$booking" accept-action="brandAcceptCounter" decline-action="brandDeclineCounter" />
                     </div>
                 @else
                     <div class="rounded-lg border border-indigo-200 bg-white p-6 dark:border-indigo-700 dark:bg-zinc-800">
@@ -397,72 +358,13 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                             Fill in the campaign details below to proceed to payment.
                         </flux:text>
 
-                        <form wire:submit="brandProceedToPayment" class="space-y-6">
-                            @if($booking->product->requirements->isNotEmpty())
-                                <div class="space-y-5">
-                                    @foreach($booking->product->requirements as $requirement)
-                                        <flux:field>
-                                            <flux:label>
-                                                {{ $requirement->name }}
-                                                @if($requirement->is_required)
-                                                    <span class="text-red-500">*</span>
-                                                @endif
-                                            </flux:label>
-
-                                            @if($requirement->description)
-                                                <flux:description>{{ $requirement->description }}</flux:description>
-                                            @endif
-
-                                            @if($requirement->type === 'textarea')
-                                                <flux:textarea
-                                                    wire:model="requirementData.{{ $requirement->id }}"
-                                                    rows="3"
-                                                />
-                                            @else
-                                                <flux:input
-                                                    wire:model="requirementData.{{ $requirement->id }}"
-                                                    :type="$requirement->type"
-                                                />
-                                            @endif
-
-                                            <flux:error name="requirementData.{{ $requirement->id }}" />
-                                        </flux:field>
-                                    @endforeach
-                                </div>
-                            @else
-                                <flux:callout variant="info" icon="information-circle">
-                                    <flux:callout.text>No additional information is required. Click below to proceed to payment.</flux:callout.text>
-                                </flux:callout>
-                            @endif
-
-                            @if($brandErrorMessage)
-                                <flux:callout variant="danger" icon="exclamation-triangle">
-                                    <flux:callout.text>{{ $brandErrorMessage }}</flux:callout.text>
-                                </flux:callout>
-                            @endif
-
-                            <flux:button
-                                type="submit"
-                                variant="primary"
-                                class="w-full"
-                                icon-trailing="arrow-right"
-                                wire:loading.attr="disabled"
-                                wire:loading.class="opacity-75"
-                            >
-                                <span wire:loading.remove wire:target="brandProceedToPayment">Proceed to Secure Payment</span>
-                                <span wire:loading wire:target="brandProceedToPayment">Preparing checkout…</span>
-                            </flux:button>
-
-                            <div class="text-center">
-                                <flux:button
-                                    wire:click="$set('showCounterAcceptStep', false)"
-                                    variant="ghost"
-                                    size="sm"
-                                >
-                                    ← Back to counter-offer
-                                </flux:button>
-                            </div>
-                        </form>
+                        <x-bookings.checkout-form
+                            :requirements="$booking->product->requirements"
+                            action="brandProceedToPayment"
+                            :error="$brandErrorMessage"
+                            back-action="$set('showCounterAcceptStep', false)"
+                            back-label="← Back to counter-offer"
+                        />
                     </div>
                 @endif
             @endif
@@ -524,67 +426,12 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                         @endif
                     </flux:text>
 
-                    <div class="flex flex-wrap gap-3">
-                        <flux:button
-                            wire:click="$set('showApproveModal', true)"
-                            variant="primary"
-                            icon="check"
-                        >
-                            Approve Work
-                        </flux:button>
-
-                        @if($booking->canRequestRevision())
-                            <flux:button
-                                wire:click="$set('showRevisionForm', true)"
-                                variant="filled"
-                                icon="arrow-path"
-                            >
-                                Request Revision
-                                <flux:badge size="sm" class="ml-1">{{ $booking->max_revisions - $booking->revision_count }} left</flux:badge>
-                            </flux:button>
-                        @endif
-
-                        @if($booking->canDispute())
-                            <flux:button
-                                wire:click="$set('showDisputeForm', true)"
-                                variant="danger"
-                                icon="shield-exclamation"
-                            >
-                                Open Dispute
-                            </flux:button>
-                        @endif
-                    </div>
+                    <x-bookings.work-review-actions :booking="$booking" />
                 </div>
             @endif
 
             @if($booking->latestSubmission)
-                <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                    <flux:heading size="lg" class="mb-4">Submitted Work</flux:heading>
-                    <div class="space-y-4">
-                        @if($booking->latestSubmission->work_url)
-                            <div>
-                                <flux:text class="text-sm font-medium text-zinc-500">Content Link</flux:text>
-                                <a href="{{ $booking->latestSubmission->work_url }}" target="_blank" rel="noopener noreferrer"
-                                   class="mt-1 flex items-center gap-1 text-indigo-600 underline dark:text-indigo-400">
-                                    {{ $booking->latestSubmission->work_url }}
-                                    <flux:icon.arrow-top-right-on-square class="h-4 w-4" />
-                                </a>
-                            </div>
-                        @endif
-                        @if($booking->latestSubmission->screenshot_path)
-                            <div>
-                                <flux:text class="text-sm font-medium text-zinc-500 mb-2">Screenshot</flux:text>
-                                <img src="{{ Storage::url($booking->latestSubmission->screenshot_path) }}"
-                                     alt="Work screenshot"
-                                     class="rounded-lg max-w-full border border-zinc-200 dark:border-zinc-600" />
-                            </div>
-                        @endif
-                        <flux:text class="text-xs text-zinc-400">
-                            Submitted {{ $booking->latestSubmission->created_at->diffForHumans() }}
-                            @if($booking->revision_count > 0) &mdash; Revision {{ $booking->revision_count }} of {{ $booking->max_revisions }} @endif
-                        </flux:text>
-                    </div>
-                </div>
+                <x-bookings.submitted-work :submission="$booking->latestSubmission" :revision-count="$booking->revision_count" :max-revisions="$booking->max_revisions" />
             @endif
 
             <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
