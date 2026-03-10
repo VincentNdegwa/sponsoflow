@@ -37,6 +37,7 @@ class Booking extends Model
         'auto_approve_at',
         'counter_amount',
         'creator_notes',
+        'currency',
     ];
 
     protected function casts(): array
@@ -51,6 +52,14 @@ class Booking extends Model
             'type' => BookingType::class,
             'status' => BookingStatus::class,
         ];
+    }
+
+    public function formatAmount(?float $amount = null): string
+    {
+        return \App\Support\CurrencySupport::formatCurrency(
+            $amount ?? (float) $this->amount_paid,
+            $this->currency ?? 'USD',
+        );
     }
 
     public function slot(): BelongsTo

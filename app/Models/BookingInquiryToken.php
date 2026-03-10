@@ -35,12 +35,12 @@ class BookingInquiryToken extends Model
         return $this->used_at === null && $this->expires_at->isFuture();
     }
 
-    public static function generateFor(Booking $booking, string $purpose = 'respond'): self
+    public static function generateFor(Booking $booking, string $purpose = 'respond', ?string $email = null): self
     {
         return self::create([
             'booking_id' => $booking->id,
             'token' => Str::random(48),
-            'email' => $booking->guest_email,
+            'email' => $email ?? $booking->guest_email ?? $booking->brandUser?->email,
             'purpose' => $purpose,
             'expires_at' => now()->addDays(14),
         ]);

@@ -186,6 +186,31 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
             ->get();
     }
 
+    #[Computed]
+    public function selectedCreatorWorkspace(): ?Workspace
+    {
+        if (! $this->selectedCreatorWorkspaceId) {
+            return null;
+        }
+
+        return Workspace::find($this->selectedCreatorWorkspaceId);
+    }
+
+    #[Computed]
+    public function creatorCurrencySymbol(): string
+    {
+        $currency = $this->selectedCreatorWorkspace?->currency ?? 'USD';
+        $currencies = \App\Support\CurrencySupport::getSupportedCurrencies();
+
+        return $currencies[$currency]['symbol'] ?? $currency;
+    }
+
+    #[Computed]
+    public function creatorCurrencyCode(): string
+    {
+        return $this->selectedCreatorWorkspace?->currency ?? 'USD';
+    }
+
     // === Watchers ===
 
     public function updatedSelectedCreatorWorkspaceId(): void
@@ -194,7 +219,7 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
         $this->bookingMode = '';
         $this->selectedSlotId = null;
         $this->requirementData = [];
-        unset($this->brandCreatorProducts, $this->selectedBrandProduct, $this->availableSlots);
+        unset($this->brandCreatorProducts, $this->selectedBrandProduct, $this->availableSlots, $this->selectedCreatorWorkspace, $this->creatorCurrencySymbol, $this->creatorCurrencyCode);
 
         if ($this->selectedCreatorWorkspaceId) {
             $products = Product::where('workspace_id', $this->selectedCreatorWorkspaceId)
@@ -739,7 +764,7 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                                 <flux:select wire:model.live="brandProductId" placeholder="Choose a product…">
                                     @foreach($this->brandCreatorProducts as $product)
                                         <flux:select.option value="{{ $product->id }}">
-                                            {{ $product->name }} — {{ formatMoney($product->base_price) }}
+                                            {{ $product->name }} — {{ \App\Support\CurrencySupport::formatCurrency((float) $product->base_price, $this->creatorCurrencyCode) }}
                                         </flux:select.option>
                                     @endforeach
                                 </flux:select>
@@ -799,7 +824,7 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                                             <p class="font-medium">{{ formatWorkspaceDate($slot->slot_date) }}</p>
                                             <p class="text-sm text-zinc-500">{{ formatWorkspaceTime($slot->slot_date) }}</p>
                                         </div>
-                                        <flux:badge variant="ghost">{{ formatMoney($slot->price) }}</flux:badge>
+                                        <flux:badge variant="ghost">{{ \App\Support\CurrencySupport::formatCurrency((float) $slot->price, $this->creatorCurrencyCode) }}</flux:badge>
                                     </div>
                                 </label>
                             @endforeach
@@ -857,8 +882,17 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                     <div class="space-y-5">
                         <flux:field>
                             <flux:label>Your budget *</flux:label>
-                            <flux:input wire:model="inquiryBudget" type="number" min="1" step="0.01" placeholder="500.00" />
-                            <flux:description>How much you're proposing for this collaboration.</flux:description>
+                            <flux:input
+                                wire:model="inquiryBudget"
+                                type="number"
+                                min="1"
+                                step="0.01"
+                                placeholder="500.00"
+                                prefix="{{ $this->creatorCurrencySymbol }}"
+                            />
+                            <flux:description>
+                                Amount in <strong>{{ $this->creatorCurrencyCode }}</strong> — the creator's currency.
+                            </flux:description>
                             <flux:error name="inquiryBudget" />
                         </flux:field>
 

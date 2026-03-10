@@ -36,6 +36,12 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
     public string $counterNote = '';
     public string $counterAmount = '';
 
+    // Brand counter-offer response
+    public bool $showCounterAcceptStep = false;
+    public array $requirementData = [];
+    public bool $brandIsProcessing = false;
+    public ?string $brandErrorMessage = null;
+
     public function mount(Booking $booking): void
     {
         $workspace = currentWorkspace();
@@ -95,6 +101,57 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
             $this->dispatch('success', 'Counter-offer sent — the brand has been notified.');
         } else {
             $this->dispatch('error', $result['error']);
+        }
+    }
+
+    public function brandAcceptCounter(): void
+    {
+        $this->showCounterAcceptStep = true;
+    }
+
+    public function brandDeclineCounter(): void
+    {
+        $result = app(BookingService::class)->rejectInquiry($this->booking, null);
+
+        if ($result['success']) {
+            $this->booking->refresh();
+            $this->dispatch('success', 'Counter-offer declined — the creator has been notified.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+    }
+
+    public function brandProceedToPayment(): void
+    {
+        $product = $this->booking->product;
+
+        foreach ($product->requirements->where('is_required', true) as $requirement) {
+            if (empty($this->requirementData[$requirement->id])) {
+                $this->addError("requirementData.{$requirement->id}", 'This field is required.');
+
+                return;
+            }
+        }
+
+        $this->brandIsProcessing = true;
+        $this->brandErrorMessage = null;
+
+        try {
+            $result = app(BookingService::class)->fulfillInquiryBooking(
+                $this->booking,
+                $this->requirementData,
+                true,
+            );
+
+            if ($result['success']) {
+                $this->redirect($result['checkout_url'], navigate: false);
+            } else {
+                $this->brandErrorMessage = $result['error'];
+            }
+        } catch (\Exception $e) {
+            $this->brandErrorMessage = 'An unexpected error occurred. Please try again.';
+        } finally {
+            $this->brandIsProcessing = false;
         }
     }
 
@@ -223,7 +280,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                     <div class="mb-4 flex items-center gap-6">
                         <div>
                             <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-500">Offered Budget</flux:text>
-                            <flux:heading size="lg">{{ formatMoney($booking->amount_paid) }}</flux:heading>
+                            <flux:heading size="lg">{{ $booking->formatAmount() }}</flux:heading>
                         </div>
                     </div>
 
@@ -261,7 +318,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                 <div class="rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-700 dark:bg-amber-950">
                     <flux:heading size="lg" class="mb-1">Awaiting Brand Response</flux:heading>
                     <flux:text class="mb-4 text-zinc-600 dark:text-zinc-400">
-                        You sent a counter-offer of <strong>{{ formatMoney($booking->counter_amount) }}</strong> to the brand.
+                        You sent a counter-offer of <strong>{{ $booking->formatAmount((float) $booking->counter_amount) }}</strong> to the brand.
                         Waiting for them to accept or decline.
                     </flux:text>
 
@@ -279,6 +336,135 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                         Withdraw &amp; Reject
                     </flux:button>
                 </div>
+            @endif
+
+            @if($this->isBrandUser() && $booking->canAcceptCounter())
+                @if(! $showCounterAcceptStep)
+                    <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-6 dark:border-indigo-700 dark:bg-indigo-950">
+                        <flux:heading size="lg" class="mb-1">You Have a Counter-Offer</flux:heading>
+                        <flux:text class="mb-6 text-zinc-600 dark:text-zinc-400">
+                            The creator has reviewed your inquiry and proposed a different rate.
+                            Review the details and choose how to respond.
+                        </flux:text>
+
+                        <div class="mb-6 grid gap-4 sm:grid-cols-2">
+                            <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
+                                <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">Your original offer</flux:text>
+                                <p class="mt-1 text-2xl font-bold text-zinc-400 line-through">
+                                    {{ $booking->formatAmount() }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border border-indigo-200 bg-white p-4 dark:border-indigo-700 dark:bg-indigo-900">
+                                <flux:text class="text-xs font-medium uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Counter-offer</flux:text>
+                                <p class="mt-1 text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+                                    {{ $booking->formatAmount((float) $booking->counter_amount) }}
+                                </p>
+                            </div>
+                        </div>
+
+                        @if($booking->creator_notes)
+                            <blockquote class="mb-6 border-l-4 border-indigo-300 pl-4 italic text-zinc-600 dark:border-indigo-600 dark:text-zinc-400">
+                                "{{ $booking->creator_notes }}"
+                            </blockquote>
+                        @endif
+
+                        <div class="flex flex-wrap gap-3">
+                            <flux:button
+                                wire:click="brandAcceptCounter"
+                                variant="primary"
+                                icon="check"
+                            >
+                                Accept Counter-Offer
+                            </flux:button>
+
+                            <flux:button
+                                wire:click="brandDeclineCounter"
+                                wire:loading.attr="disabled"
+                                variant="danger"
+                                icon="x-mark"
+                            >
+                                <span wire:loading.remove wire:target="brandDeclineCounter">Decline</span>
+                                <span wire:loading wire:target="brandDeclineCounter">Declining…</span>
+                            </flux:button>
+                        </div>
+                    </div>
+                @else
+                    <div class="rounded-lg border border-indigo-200 bg-white p-6 dark:border-indigo-700 dark:bg-zinc-800">
+                        <flux:heading size="lg" class="mb-1">Complete Your Booking — Counter-Offer Accepted</flux:heading>
+                        <flux:text class="mb-6 text-zinc-600 dark:text-zinc-400">
+                            You're accepting the counter-offer of
+                            <strong class="text-zinc-700 dark:text-zinc-200">{{ $booking->formatAmount((float) $booking->counter_amount) }}</strong>.
+                            Fill in the campaign details below to proceed to payment.
+                        </flux:text>
+
+                        <form wire:submit="brandProceedToPayment" class="space-y-6">
+                            @if($booking->product->requirements->isNotEmpty())
+                                <div class="space-y-5">
+                                    @foreach($booking->product->requirements as $requirement)
+                                        <flux:field>
+                                            <flux:label>
+                                                {{ $requirement->name }}
+                                                @if($requirement->is_required)
+                                                    <span class="text-red-500">*</span>
+                                                @endif
+                                            </flux:label>
+
+                                            @if($requirement->description)
+                                                <flux:description>{{ $requirement->description }}</flux:description>
+                                            @endif
+
+                                            @if($requirement->type === 'textarea')
+                                                <flux:textarea
+                                                    wire:model="requirementData.{{ $requirement->id }}"
+                                                    rows="3"
+                                                />
+                                            @else
+                                                <flux:input
+                                                    wire:model="requirementData.{{ $requirement->id }}"
+                                                    :type="$requirement->type"
+                                                />
+                                            @endif
+
+                                            <flux:error name="requirementData.{{ $requirement->id }}" />
+                                        </flux:field>
+                                    @endforeach
+                                </div>
+                            @else
+                                <flux:callout variant="info" icon="information-circle">
+                                    <flux:callout.text>No additional information is required. Click below to proceed to payment.</flux:callout.text>
+                                </flux:callout>
+                            @endif
+
+                            @if($brandErrorMessage)
+                                <flux:callout variant="danger" icon="exclamation-triangle">
+                                    <flux:callout.text>{{ $brandErrorMessage }}</flux:callout.text>
+                                </flux:callout>
+                            @endif
+
+                            <flux:button
+                                type="submit"
+                                variant="primary"
+                                class="w-full"
+                                icon-trailing="arrow-right"
+                                wire:loading.attr="disabled"
+                                wire:loading.class="opacity-75"
+                            >
+                                <span wire:loading.remove wire:target="brandProceedToPayment">Proceed to Secure Payment</span>
+                                <span wire:loading wire:target="brandProceedToPayment">Preparing checkout…</span>
+                            </flux:button>
+
+                            <div class="text-center">
+                                <flux:button
+                                    wire:click="$set('showCounterAcceptStep', false)"
+                                    variant="ghost"
+                                    size="sm"
+                                >
+                                    ← Back to counter-offer
+                                </flux:button>
+                            </div>
+                        </form>
+                    </div>
+                @endif
             @endif
 
             @if($this->isCreator() && $booking->status === \App\Enums\BookingStatus::PENDING_PAYMENT && $booking->isCreatorInitiated())
@@ -501,7 +687,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                     
                     <div>
                         <flux:text class="text-sm font-medium text-zinc-500">Amount</flux:text>
-                        <flux:heading class="mt-1">{{ formatMoney($booking->amount_paid) }}</flux:heading>
+                        <flux:heading class="mt-1">{{ $booking->formatAmount() }}</flux:heading>
                     </div>
 
                     @if($booking->revision_count > 0)

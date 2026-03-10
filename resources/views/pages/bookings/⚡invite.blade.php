@@ -136,7 +136,7 @@ new #[Layout('layouts::guest'), Title('Complete Your Booking')] class extends Co
                         </div>
                         <div>
                             <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-500">Amount</flux:text>
-                            <p class="mt-1 text-2xl font-bold text-accent-content">{{ formatMoney($booking->amount_paid, $booking->workspace) }}</p>
+                            <p class="mt-1 text-2xl font-bold text-accent-content">{{ $booking->formatAmount() }}</p>
                         </div>
                     </div>
 

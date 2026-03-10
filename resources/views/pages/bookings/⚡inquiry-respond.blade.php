@@ -149,13 +149,13 @@ new #[Layout('layouts::guest'), Title('Respond to Inquiry')] class extends Compo
                         <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
                             <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">Your original offer</flux:text>
                             <p class="mt-1 text-2xl font-bold text-zinc-400 line-through">
-                                {{ formatMoney($booking->amount_paid) }}
+                                {{ $booking->formatAmount() }}
                             </p>
                         </div>
                         <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-700 dark:bg-indigo-950">
                             <flux:text class="text-xs font-medium uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Counter-offer</flux:text>
                             <p class="mt-1 text-2xl font-bold text-indigo-700 dark:text-indigo-300">
-                                {{ formatMoney($booking->counter_amount) }}
+                                {{ $booking->formatAmount((float) $booking->counter_amount) }}
                             </p>
                         </div>
                     </div>
@@ -207,10 +207,10 @@ new #[Layout('layouts::guest'), Title('Respond to Inquiry')] class extends Compo
                     </flux:heading>
                     <flux:text class="mb-6 text-zinc-500">
                         @if($inquiryToken->purpose === 'accept_counter')
-                            You're accepting the counter-offer of <strong class="text-zinc-700 dark:text-zinc-200">{{ formatMoney($booking->counter_amount) }}</strong>.
+                            You're accepting the counter-offer of <strong class="text-zinc-700 dark:text-zinc-200">{{ $booking->formatAmount((float) $booking->counter_amount) }}</strong>.
                             Fill in the campaign details below to proceed to payment.
                         @else
-                            Your inquiry was approved at <strong class="text-zinc-700 dark:text-zinc-200">{{ formatMoney($booking->amount_paid) }}</strong>.
+                            Your inquiry was approved at <strong class="text-zinc-700 dark:text-zinc-200">{{ $booking->formatAmount() }}</strong>.
                             Fill in the campaign details below to proceed to payment.
                         @endif
                     </flux:text>

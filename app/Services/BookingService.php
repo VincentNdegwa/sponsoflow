@@ -57,6 +57,7 @@ class BookingService
                 'type' => BookingType::INQUIRY,
                 'requirement_data' => $data['requirement_data'],
                 'amount_paid' => $totalAmount,
+                'currency' => $workspace->currency ?? 'USD',
                 'status' => BookingStatus::INQUIRY,
                 'notes' => 'Custom collaboration proposal submitted',
             ];
@@ -141,6 +142,7 @@ class BookingService
                     'type' => BookingType::INSTANT,
                     'requirement_data' => $data['requirement_data'],
                     'amount_paid' => $totalAmount,
+                    'currency' => $workspace->currency ?? 'USD',
                     'status' => BookingStatus::PENDING_PAYMENT,
                 ];
 
@@ -199,15 +201,11 @@ class BookingService
 
         $booking->update(['status' => BookingStatus::PROCESSING]);
 
-        $token = BookingInquiryToken::generateFor($booking, 'respond');
+        $brandEmail = $this->resolveBrandEmail($booking);
+        $token = BookingInquiryToken::generateFor($booking, 'respond', $brandEmail);
         $checkoutUrl = route('bookings.inquiry-respond', ['token' => $token->token]);
 
-        $notifiable = new \Illuminate\Notifications\AnonymousNotifiable;
-        $notifiable->route('mail', $booking->guest_email);
-        \Illuminate\Support\Facades\Notification::send(
-            [$notifiable],
-            new InquiryApprovedNotification($booking, $checkoutUrl),
-        );
+        $this->sendBrandNotification($booking, new InquiryApprovedNotification($booking, $checkoutUrl));
 
         return $this->successResponse(['checkout_url' => $checkoutUrl]);
     }
@@ -223,12 +221,7 @@ class BookingService
             'creator_notes' => $creatorNotes,
         ]);
 
-        $notifiable = new \Illuminate\Notifications\AnonymousNotifiable;
-        $notifiable->route('mail', $booking->guest_email);
-        \Illuminate\Support\Facades\Notification::send(
-            [$notifiable],
-            new InquiryRejectedNotification($booking),
-        );
+        $this->sendBrandNotification($booking, new InquiryRejectedNotification($booking));
 
         return $this->successResponse([]);
     }
@@ -245,15 +238,11 @@ class BookingService
             'creator_notes' => $creatorNotes,
         ]);
 
-        $token = BookingInquiryToken::generateFor($booking, 'accept_counter');
+        $brandEmail = $this->resolveBrandEmail($booking);
+        $token = BookingInquiryToken::generateFor($booking, 'accept_counter', $brandEmail);
         $respondUrl = route('bookings.inquiry-respond', ['token' => $token->token]);
 
-        $notifiable = new \Illuminate\Notifications\AnonymousNotifiable;
-        $notifiable->route('mail', $booking->guest_email);
-        \Illuminate\Support\Facades\Notification::send(
-            [$notifiable],
-            new InquiryCounteredNotification($booking, $respondUrl),
-        );
+        $this->sendBrandNotification($booking, new InquiryCounteredNotification($booking, $respondUrl));
 
         return $this->successResponse([]);
     }
@@ -394,6 +383,23 @@ class BookingService
         }
     }
 
+
+    private function sendBrandNotification(Booking $booking, \Illuminate\Notifications\Notification $notification): void
+    {
+        if ($booking->brandUser) {
+            $booking->brandUser->notify($notification);
+        } elseif ($booking->guest_email) {
+            $notifiable = new \Illuminate\Notifications\AnonymousNotifiable;
+            $notifiable->route('mail', $booking->guest_email);
+            Notification::send([$notifiable], $notification);
+        }
+    }
+
+    private function resolveBrandEmail(Booking $booking): ?string
+    {
+        return $booking->brandUser?->email ?? $booking->guest_email;
+    }
+
     public function validateBookingAuth(User $creator, ?User $authUser): bool
     {
         if (! $authUser) {
@@ -477,6 +483,7 @@ class BookingService
                 'workspace_id' => $workspace->id,
                 'type' => BookingType::INSTANT,
                 'amount_paid' => $data['amount'] ?? $product->base_price,
+                'currency' => $workspace->currency ?? 'USD',
                 'status' => BookingStatus::PENDING_PAYMENT,
                 'notes' => $data['notes'] ?? null,
                 'max_revisions' => 3,

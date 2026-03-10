@@ -5,7 +5,7 @@
         <div>
             <flux:heading size="lg">Send a Counter-Offer</flux:heading>
             <flux:text class="mt-2 text-zinc-500">
-                The brand offered <strong class="text-zinc-700 dark:text-zinc-200">{{ formatMoney($booking->amount_paid) }}</strong>.
+                The brand offered <strong class="text-zinc-700 dark:text-zinc-200">{{ $booking->formatAmount() }}</strong>.
                 Propose a different amount and optionally explain your reasoning.
             </flux:text>
         </div>

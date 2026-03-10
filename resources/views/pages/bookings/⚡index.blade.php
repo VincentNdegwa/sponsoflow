@@ -343,7 +343,7 @@ new #[Layout('layouts::app'), Title('Bookings')] class extends Component {
                         </flux:table.cell>
 
                         <flux:table.cell variant="strong">
-                            {{ formatMoney($booking->amount_paid) }}
+                            {{ $booking->formatAmount() }}
                         </flux:table.cell>
 
                         <flux:table.cell>
