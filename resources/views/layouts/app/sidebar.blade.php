@@ -35,7 +35,15 @@
 
         <flux:spacer />
 
-        <x-desktop-user-menu class="hidden lg:block" :name="auth()->user()->name" />
+        <flux:sidebar.nav>
+            <livewire:notifications.notification-bell />
+        </flux:sidebar.nav>
+
+        <div class="hidden items-center gap-2 px-2 pb-3 lg:flex">
+            <div class="flex-1">
+                <x-desktop-user-menu :name="auth()->user()->name" />
+            </div>
+        </div>
     </flux:sidebar>
 
     <!-- Mobile User Menu -->
@@ -43,6 +51,8 @@
         <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
 
         <flux:spacer />
+
+        <livewire:notifications.notification-bell mode="icon" />
 
         <flux:dropdown position="top" align="end">
             <flux:profile :initials="auth()->user()->initials()" icon-trailing="chevron-down" />
