@@ -31,6 +31,14 @@
                     this.showToast(type, msg, type === 'error' ? 8000 : 5000);
                 });
             });
+
+            window.addEventListener('notification-toast', (e) => {
+                const titles = { success: 'Success', error: 'Error', warning: 'Warning', info: 'Info' };
+                this.toast = { type: 'info', title: e.detail?.title ?? 'Notification', message: e.detail?.message ?? '' };
+                this.show = true;
+                clearTimeout(this._timer);
+                this._timer = setTimeout(() => this.show = false, 5000);
+            });
         }
     }"
     x-show="show"

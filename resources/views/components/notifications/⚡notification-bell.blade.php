@@ -2,7 +2,6 @@
 
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Str;
-use Livewire\Attributes\On;
 use Livewire\Component;
 
 new class extends Component {
@@ -92,8 +91,40 @@ new class extends Component {
     x-data
     x-init="$nextTick(() => {
         if (window.Echo) {
+            // Request browser notification permission proactively
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+
             window.Echo.private('App.Models.User.{{ auth()->id() }}')
-                .notification(() => $wire.loadNotifications());
+                .notification((payload) => {
+                    $wire.loadNotifications();
+                    $store.notifPanel.hasNew = true;
+
+                    // Build a readable label from the payload type
+                    const labels = {
+                        inquiry_received:  'New Inquiry',
+                        payment_received:  'Payment Received',
+                        work_submitted:    'Work Submitted',
+                        work_approved:     'Work Approved',
+                        revision_requested:'Revision Requested',
+                        dispute_opened:    'Dispute Opened',
+                        booking_invite:    'Booking Invite',
+                    };
+                    const label  = labels[payload.type] ?? 'New Notification';
+                    const body   = payload.product_name ?? '';
+
+                    // In-app toast
+                    $store.notifPanel.addToast(label, body);
+
+                    // Browser notification when tab is hidden
+                    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+                        new Notification(label, {
+                            body: body,
+                            icon: '/favicon.ico',
+                        });
+                    }
+                });
         }
     })"
     @keydown.escape.window="$store.notifPanel.open = false"
@@ -105,16 +136,18 @@ new class extends Component {
     @if($mode === 'sidebar')
         <flux:sidebar.item
             icon="bell"
-            @click="$store.notifPanel.open = !$store.notifPanel.open"
+            @click="$store.notifPanel.open = !$store.notifPanel.open; $store.notifPanel.hasNew = false"
             badgeColor="amber"
             :badge="$unreadCount > 0 ? ($unreadCount > 99 ? '99+' : (string) $unreadCount) : null"
+            x-bind:class="{ 'notif-glow': $store.notifPanel.hasNew }"
         >
             {{ __('Notifications') }}
         </flux:sidebar.item>
     @else
         <button
-            @click="$store.notifPanel.open = !$store.notifPanel.open"
+            @click="$store.notifPanel.open = !$store.notifPanel.open; $store.notifPanel.hasNew = false"
             class="relative flex h-9 w-9 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-200 focus:outline-none"
+            x-bind:class="{ 'notif-glow': $store.notifPanel.hasNew }"
             aria-label="{{ __('Notifications') }}"
         >
             <flux:icon.bell class="h-5 w-5" />
@@ -138,6 +171,7 @@ new class extends Component {
         x-transition:leave-end="opacity-0 translate-x-4"
         @click.outside="$store.notifPanel.open = false"
         class="fixed top-0 z-50 flex h-screen flex-col border-l border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 {{ $mode === 'sidebar' ? 'right-0 w-full sm:w-96 lg:left-64 lg:right-auto lg:w-96' : 'right-0 w-full sm:w-96' }}"
+        x-effect="if (open) $store.notifPanel.hasNew = false"
     >
         {{-- Header --}}
         <div class="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">

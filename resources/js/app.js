@@ -4,7 +4,16 @@ import Pusher from 'pusher-js';
 window.Pusher = Pusher;
 
 document.addEventListener('alpine:init', () => {
-    Alpine.store('notifPanel', { open: false });
+    Alpine.store('notifPanel', {
+        open: false,
+        hasNew: false,
+
+        addToast(label, body) {
+            window.dispatchEvent(new CustomEvent('notification-toast', {
+                detail: { title: label, message: body },
+            }));
+        },
+    });
 });
 
 window.Echo = new Echo({

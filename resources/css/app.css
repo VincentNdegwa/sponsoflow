@@ -72,3 +72,13 @@ select:focus[data-flux-control] {
 } */
 
 [x-cloak] { display: none !important; }
+
+@keyframes notif-glow {
+    0%, 100% { background-color: transparent; }
+    50%       { background-color: rgb(99 102 241 / 0.12); }
+}
+
+.notif-glow {
+    animation: notif-glow 1.4s ease-in-out infinite;
+    border-radius: 0.5rem;
+}
