@@ -4,6 +4,10 @@ namespace App\Support;
 
 class CurrencySupport
 {
+    public const string PAYSTACK_PROVIDER = 'paystack';
+
+    public const array PAYSTACK_SUPPORTED_CURRENCIES = ['NGN', 'GHS', 'ZAR', 'KES'];
+
     public static function getSupportedCurrencies(): array
     {
         return [
@@ -118,6 +122,23 @@ class CurrencySupport
         ];
     }
 
+    public static function getPaystackSupportedCountries(): array
+    {
+        return array_filter(
+            self::getSupportedCountries(),
+            fn (array $country): bool => in_array(self::PAYSTACK_PROVIDER, $country['providers'], true)
+        );
+    }
+
+    public static function getPaystackSupportedCurrencies(): array
+    {
+        return array_filter(
+            self::getSupportedCurrencies(),
+            fn (array $currency, string $code): bool => in_array($code, self::PAYSTACK_SUPPORTED_CURRENCIES, true),
+            ARRAY_FILTER_USE_BOTH
+        );
+    }
+
     public static function getRecommendedProvider(string $creatorCountry, string $brandCountry = 'global'): string
     {
         $countries = self::getSupportedCountries();
@@ -201,9 +222,9 @@ class CurrencySupport
     {
         $supportedCurrencies = [
             'stripe' => ['USD', 'EUR', 'GBP', 'CAD', 'NGN', 'GHS', 'ZAR', 'KES'],
-            'paystack' => ['NGN', 'GHS', 'ZAR', 'KES'],
+            'paystack' => self::PAYSTACK_SUPPORTED_CURRENCIES,
         ];
 
-        return in_array($currency, $supportedCurrencies[$provider] ?? []);
+        return in_array($currency, $supportedCurrencies[$provider] ?? [], true);
     }
 }

@@ -9,6 +9,8 @@ use App\Services\Providers\StripePaymentProvider;
 
 class PaymentService
 {
+    private const string ACTIVE_PROVIDER = 'paystack';
+
     protected array $providers = [];
 
     public function __construct()
@@ -22,11 +24,10 @@ class PaymentService
     public function createCheckoutSession(Booking $booking, string $brandCountry = 'global'): array
     {
         $workspace = $booking->product->workspace;
-        $recommendedProvider = $workspace->getRecommendedProvider($brandCountry);
-        $paymentConfig = $workspace->activePaymentConfiguration($recommendedProvider);
+        $paymentConfig = $workspace->activePaymentConfiguration(self::ACTIVE_PROVIDER);
 
         if (! $paymentConfig) {
-            throw new \Exception("No active payment configuration found for workspace: {$workspace->name} with provider: {$recommendedProvider}");
+            throw new \Exception("No active payment configuration found for workspace: {$workspace->name} with provider: ".self::ACTIVE_PROVIDER);
         }
 
         $provider = $this->getProvider($paymentConfig);
@@ -34,7 +35,7 @@ class PaymentService
         return $provider->createCheckoutSession($booking, $paymentConfig);
     }
 
-    public function handleSuccessfulPayment(string $sessionId, string $provider = 'stripe'): void
+    public function handleSuccessfulPayment(string $sessionId, string $provider = self::ACTIVE_PROVIDER): void
     {
         $providerInstance = $this->getProviderByName($provider);
         $providerInstance->handleSuccessfulPayment($sessionId);
@@ -44,8 +45,10 @@ class PaymentService
     {
         // Auto-select best provider if not specified
         if (! $provider) {
-            $provider = $workspace->getRecommendedProvider();
+            $provider = self::ACTIVE_PROVIDER;
         }
+
+        $this->ensureProviderAllowed($provider);
 
         // Validate provider supports workspace currency
         if (! $workspace->supportsProvider($provider)) {
@@ -97,7 +100,7 @@ class PaymentService
 
     public function getAvailableProviders(): array
     {
-        return array_keys($this->providers);
+        return [self::ACTIVE_PROVIDER];
     }
 
     public function releaseFunds(Booking $booking): bool
@@ -146,6 +149,8 @@ class PaymentService
 
     public function getSupportedBanks(string $provider = 'paystack', string $countryCode = 'NG'): array
     {
+        $this->ensureProviderAllowed($provider);
+
         $providerInstance = $this->getProviderByName($provider);
 
         if (method_exists($providerInstance, 'getSupportedBanks')) {
@@ -157,6 +162,8 @@ class PaymentService
 
     public function verifyBankAccount(string $accountNumber, string $bankCode, string $provider = 'paystack'): array
     {
+        $this->ensureProviderAllowed($provider);
+
         $providerInstance = $this->getProviderByName($provider);
 
         if (method_exists($providerInstance, 'verifyBankAccount')) {
@@ -164,5 +171,12 @@ class PaymentService
         }
 
         throw new \Exception("Provider '{$provider}' does not support bank verification");
+    }
+
+    private function ensureProviderAllowed(string $provider): void
+    {
+        if ($provider !== self::ACTIVE_PROVIDER) {
+            throw new \Exception("Provider '{$provider}' is currently disabled. Active provider: ".self::ACTIVE_PROVIDER);
+        }
     }
 }

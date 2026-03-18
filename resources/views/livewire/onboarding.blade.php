@@ -4,13 +4,14 @@ use App\Services\PaymentService;
 use App\Support\CurrencySupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Creator Onboarding')] class extends Component {
-    public string $country_code = 'US';
-    public string $currency = 'USD';
+    public string $country_code = 'NG';
+    public string $currency = 'NGN';
     
     public string $bank_code = '';
     public string $account_number = '';
@@ -26,18 +27,41 @@ new #[Title('Creator Onboarding')] class extends Component {
     public function mount(): void
     {
         $workspace = $this->getCurrentWorkspace();
+
+        $supportedCountries = $this->supportedCountries;
+        $supportedCurrencies = $this->supportedCurrencies;
+
+        $defaultCountryCode = array_key_first($supportedCountries) ?? 'NG';
+        $defaultCurrencyCode = $supportedCountries[$defaultCountryCode]['currency'] ?? 'NGN';
         
         if ($workspace) {
-            $this->country_code = $workspace->country_code ?: 'US';
-            $this->currency = $workspace->currency ?: 'USD';
+            if ($workspace->country_code && isset($supportedCountries[$workspace->country_code])) {
+                $this->country_code = $workspace->country_code;
+            } else {
+                $this->country_code = $defaultCountryCode;
+            }
+
+            if ($workspace->currency && isset($supportedCurrencies[$workspace->currency])) {
+                $this->currency = $workspace->currency;
+            } else {
+                $this->currency = $supportedCountries[$this->country_code]['currency'] ?? $defaultCurrencyCode;
+            }
+
+            return;
         }
+
+        $this->country_code = $defaultCountryCode;
+        $this->currency = $defaultCurrencyCode;
     }
 
     public function saveCountryAndCurrency(): void
     {
+        $supportedCountryCodes = array_keys($this->supportedCountries);
+        $supportedCurrencyCodes = array_keys($this->supportedCurrencies);
+
         $this->validate([
-            'country_code' => 'required|string|size:2',
-            'currency' => 'required|string|size:3',
+            'country_code' => ['required', 'string', 'size:2', Rule::in($supportedCountryCodes)],
+            'currency' => ['required', 'string', 'size:3', Rule::in($supportedCurrencyCodes)],
         ]);
 
         try {
@@ -47,9 +71,14 @@ new #[Title('Creator Onboarding')] class extends Component {
                 throw new \Exception('No workspace found.');
             }
 
-            $recommendedProvider = CurrencySupport::getRecommendedProvider($this->country_code);
+            $recommendedProvider = CurrencySupport::PAYSTACK_PROVIDER;
             if (!CurrencySupport::isCurrencySupportedByProvider($this->currency, $recommendedProvider)) {
                 throw new \Exception("Currency {$this->currency} is not supported by the recommended provider ({$recommendedProvider}) for {$this->country_code}");
+            }
+
+            $countryDefaultCurrency = $this->supportedCountries[$this->country_code]['currency'] ?? null;
+            if ($countryDefaultCurrency !== $this->currency) {
+                throw new \Exception("Currency {$this->currency} is not supported for {$this->country_code}.");
             }
 
             $workspace->update([
@@ -57,12 +86,8 @@ new #[Title('Creator Onboarding')] class extends Component {
                 'currency' => $this->currency,
             ]);
             
-            if ($this->requiresPaymentSetup()) {
-                $this->loadSupportedBanks();
-                $this->current_step = 2;
-            } else {
-                $this->completeOnboarding();
-            }
+            $this->loadSupportedBanks();
+            $this->current_step = 2;
             
         } catch (\Exception $e) {
             session()->flash('error', 'Failed to save settings: ' . $e->getMessage());
@@ -78,22 +103,15 @@ new #[Title('Creator Onboarding')] class extends Component {
                 return;
             }
             
-            $provider = $workspace->getRecommendedProvider();
-            
-            if ($provider !== 'paystack') {
-                $this->supported_banks = [];
-                return;
-            }
-            
             $paymentService = app(PaymentService::class);
-            $banks = $paymentService->getSupportedBanks($provider, $workspace->country_code);
+            $banks = $paymentService->getSupportedBanks(CurrencySupport::PAYSTACK_PROVIDER, $workspace->country_code);
             
             // Remove duplicates by bank code
             $uniqueBanks = [];
             $seenCodes = [];
             
             foreach ($banks as $bank) {
-                if (!in_array($bank['code'], $seenCodes)) {
+                if (!in_array($bank['code'], $seenCodes, true)) {
                     $uniqueBanks[] = $bank;
                     $seenCodes[] = $bank['code'];
                 }
@@ -121,9 +139,8 @@ new #[Title('Creator Onboarding')] class extends Component {
                 throw new \Exception('No workspace found.');
             }
             
-            $provider = $workspace->getRecommendedProvider();
             $paymentService = app(PaymentService::class);
-            $verification = $paymentService->verifyBankAccount($this->account_number, $this->bank_code, $provider);
+            $verification = $paymentService->verifyBankAccount($this->account_number, $this->bank_code, CurrencySupport::PAYSTACK_PROVIDER);
             
             $this->account_name = $verification['account_name'];
             $this->verification_status = 'verified';
@@ -153,7 +170,6 @@ new #[Title('Creator Onboarding')] class extends Component {
                 throw new \Exception('No workspace found.');
             }
 
-            $provider = $workspace->getRecommendedProvider();
             $paymentService = app(PaymentService::class);
             
             $bankDetails = [
@@ -162,7 +178,7 @@ new #[Title('Creator Onboarding')] class extends Component {
                 'account_name' => $this->account_name,
             ];
             
-            $result = $paymentService->createConnectAccount($workspace, $provider, $bankDetails);
+            $result = $paymentService->createConnectAccount($workspace, CurrencySupport::PAYSTACK_PROVIDER, $bankDetails);
             
             session()->flash('status', 'Payment account created successfully!');
             $this->completeOnboarding();
@@ -215,19 +231,19 @@ new #[Title('Creator Onboarding')] class extends Component {
     #[Computed]
     public function supportedCountries(): array
     {
-        return CurrencySupport::getSupportedCountries();
+        return CurrencySupport::getPaystackSupportedCountries();
     }
 
     #[Computed]
     public function supportedCurrencies(): array
     {
-        return CurrencySupport::getSupportedCurrencies();
+        return CurrencySupport::getPaystackSupportedCurrencies();
     }
 
     #[Computed]
     public function recommendedProvider(): string
     {
-        return CurrencySupport::getRecommendedProvider($this->country_code);
+        return CurrencySupport::PAYSTACK_PROVIDER;
     }
 
 
@@ -240,9 +256,8 @@ new #[Title('Creator Onboarding')] class extends Component {
             return false;
         }
         
-        $provider = $workspace->getRecommendedProvider();
         $config = $workspace->paymentConfigurations()
-            ->where('provider', $provider)
+            ->where('provider', CurrencySupport::PAYSTACK_PROVIDER)
             ->first();
             
         return $config && $config->provider_account_id;
@@ -255,8 +270,7 @@ new #[Title('Creator Onboarding')] class extends Component {
 
     private function requiresPaymentSetup(): bool
     {
-        $provider = $this->recommendedProvider;
-        return $provider === 'paystack';
+        return true;
     }
 
     public function updatedCountryCode(): void
