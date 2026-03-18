@@ -5,8 +5,13 @@ use App\Services\BookingService;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithFileUploads;
+
+
 
 new #[Layout('layouts::guest'), Title('Respond to Inquiry')] class extends Component {
+    use WithFileUploads;
+    
     public ?BookingInquiryToken $inquiryToken = null;
     public bool $tokenInvalid = false;
 

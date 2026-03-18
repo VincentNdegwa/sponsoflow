@@ -112,7 +112,7 @@ new #[Layout('layouts::app'), Title('Create Product')] class extends Component {
             </div>
 
             <div class="mt-6 grid gap-6 md:grid-cols-3">
-                <flux:input wire:model="base_price" label="Base Price ($)" type="number" step="0.01" min="0"
+                <flux:input wire:model="base_price" label="Base Price " type="number" step="0.01" min="0"
                     required />
                 <flux:input wire:model="duration_minutes" label="Duration (minutes)" type="number" min="1"
                     required />
