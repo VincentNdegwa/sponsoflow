@@ -10,8 +10,8 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Creator Onboarding')] class extends Component {
-    public string $country_code = 'NG';
-    public string $currency = 'NGN';
+    public string $country_code = 'KE';
+    public string $currency = 'KES';
     
     public string $bank_code = '';
     public string $account_number = '';
@@ -31,8 +31,8 @@ new #[Title('Creator Onboarding')] class extends Component {
         $supportedCountries = $this->supportedCountries;
         $supportedCurrencies = $this->supportedCurrencies;
 
-        $defaultCountryCode = array_key_first($supportedCountries) ?? 'NG';
-        $defaultCurrencyCode = $supportedCountries[$defaultCountryCode]['currency'] ?? 'NGN';
+        $defaultCountryCode = isset($supportedCountries['KE']) ? 'KE' : (array_key_first($supportedCountries) ?? 'KE');
+        $defaultCurrencyCode = $supportedCountries[$defaultCountryCode]['currency'] ?? 'KES';
         
         if ($workspace) {
             if ($workspace->country_code && isset($supportedCountries[$workspace->country_code])) {
