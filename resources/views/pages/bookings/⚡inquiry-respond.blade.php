@@ -147,34 +147,15 @@ new #[Layout('layouts::guest'), Title('Respond to Inquiry')] class extends Compo
 
             {{-- Requirements form --}}
             @if($step === 'requirements')
-                <div class="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-                    <flux:heading size="lg" class="mb-2">
-                        @if($inquiryToken->purpose === 'accept_counter')
-                            Complete Your Booking — Counter-Offer Accepted
-                        @else
-                            Complete Your Booking
-                        @endif
-                    </flux:heading>
-                    <flux:text class="mb-6 text-zinc-500">
-                        @if($inquiryToken->purpose === 'accept_counter')
-                            You're accepting the counter-offer of <strong class="text-zinc-700 dark:text-zinc-200">{{ $booking->formatAmount((float) $booking->counter_amount) }}</strong>.
-                            Fill in the campaign details below to proceed to payment.
-                        @else
-                            Your inquiry was approved at <strong class="text-zinc-700 dark:text-zinc-200">{{ $booking->formatAmount() }}</strong>.
-                            Fill in the campaign details below to proceed to payment.
-                        @endif
-                    </flux:text>
-
-                    @php $checkoutBackAction = $inquiryToken->purpose === 'accept_counter' ? '$set(\'step\', \'overview\')' : null; @endphp
-                    <x-bookings.checkout-form
-                        :requirements="$product->requirements"
-                        action="proceedToPayment"
-                        :error="$errorMessage"
-                        :back-action="$checkoutBackAction"
-                        back-label="← Back to counter-offer"
-                    />
-
-                </div>
+                @php $checkoutBackAction = $inquiryToken->purpose === 'accept_counter' ? '$set(\'step\', \'overview\')' : null; @endphp
+                <x-bookings.inquiry-payment-step
+                    :booking="$booking"
+                    :purpose="$inquiryToken->purpose"
+                    action="proceedToPayment"
+                    :error="$errorMessage"
+                    :back-action="$checkoutBackAction"
+                    back-label="← Back to counter-offer"
+                />
             @endif
         @endif
     </div>

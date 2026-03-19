@@ -169,17 +169,27 @@ class Booking extends Model
 
     public function canRequestRevision(): bool
     {
-        return $this->status === BookingStatus::PROCESSING && $this->revision_count < $this->max_revisions;
+        return $this->canReviewSubmittedWork() && $this->revision_count < $this->max_revisions;
     }
 
     public function canApprove(): bool
     {
-        return $this->status === BookingStatus::PROCESSING;
+        return $this->canReviewSubmittedWork();
     }
 
     public function canDispute(): bool
     {
-        return $this->status === BookingStatus::PROCESSING && $this->revision_count >= $this->max_revisions;
+        return $this->canReviewSubmittedWork() && $this->revision_count >= $this->max_revisions;
+    }
+
+    public function canProceedInquiryPayment(): bool
+    {
+        return $this->isInquiry() && $this->status === BookingStatus::PENDING_PAYMENT;
+    }
+
+    public function canReviewSubmittedWork(): bool
+    {
+        return $this->status === BookingStatus::PROCESSING && $this->latestSubmission !== null;
     }
 
     public function revisionsExhausted(): bool

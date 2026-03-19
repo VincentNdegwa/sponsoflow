@@ -212,7 +212,7 @@ class BookingService
             return $this->errorResponse('This inquiry cannot be approved at this time.');
         }
 
-        $booking->update(['status' => BookingStatus::PROCESSING]);
+        $booking->update(['status' => BookingStatus::PENDING_PAYMENT]);
 
         $brandEmail = $this->resolveBrandEmail($booking);
         $token = BookingInquiryToken::generateFor($booking, 'respond', $brandEmail);
@@ -268,7 +268,7 @@ class BookingService
     {
         $allowedStatuses = $acceptingCounter
             ? [BookingStatus::COUNTER_OFFERED]
-            : [BookingStatus::PROCESSING];
+            : [BookingStatus::PENDING_PAYMENT];
 
         if (! in_array($booking->status, $allowedStatuses, true)) {
             return $this->errorResponse('This booking cannot be fulfilled at this time.');

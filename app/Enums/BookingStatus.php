@@ -21,7 +21,7 @@ enum BookingStatus: string
         return match ($this) {
             self::PENDING => 'Pending',
             self::CONFIRMED => 'Confirmed',
-            self::PROCESSING => 'Awaiting Approval',
+            self::PROCESSING => 'Processing',
             self::REVISION_REQUESTED => 'Revision Requested',
             self::COMPLETED => 'Completed',
             self::CANCELLED => 'Cancelled',

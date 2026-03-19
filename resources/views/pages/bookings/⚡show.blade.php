@@ -123,6 +123,16 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
 
     public function brandProceedToPayment(): void
     {
+        $this->processBrandInquiryPayment(true);
+    }
+
+    public function brandProceedApprovedInquiryToPayment(): void
+    {
+        $this->processBrandInquiryPayment(false);
+    }
+
+    private function processBrandInquiryPayment(bool $acceptingCounter): void
+    {
         $product = $this->booking->product;
 
         $validationErrors = app(BookingService::class)->validateRequirementData($product, $this->requirementData);
@@ -140,7 +150,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
             $result = app(BookingService::class)->fulfillInquiryBooking(
                 $this->booking,
                 $this->requirementData,
-                true,
+                $acceptingCounter,
             );
 
             if ($result['success']) {
@@ -351,23 +361,24 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                         <x-bookings.counter-offer-respond :booking="$booking" accept-action="brandAcceptCounter" decline-action="brandDeclineCounter" />
                     </div>
                 @else
-                    <div class="rounded-lg border border-indigo-200 bg-white p-6 dark:border-indigo-700 dark:bg-zinc-800">
-                        <flux:heading size="lg" class="mb-1">Complete Your Booking — Counter-Offer Accepted</flux:heading>
-                        <flux:text class="mb-6 text-zinc-600 dark:text-zinc-400">
-                            You're accepting the counter-offer of
-                            <strong class="text-zinc-700 dark:text-zinc-200">{{ $booking->formatAmount((float) $booking->counter_amount) }}</strong>.
-                            Fill in the campaign details below to proceed to payment.
-                        </flux:text>
-
-                        <x-bookings.checkout-form
-                            :requirements="$booking->product->requirements"
-                            action="brandProceedToPayment"
-                            :error="$brandErrorMessage"
-                            back-action="$set('showCounterAcceptStep', false)"
-                            back-label="← Back to counter-offer"
-                        />
-                    </div>
+                    <x-bookings.inquiry-payment-step
+                        :booking="$booking"
+                        purpose="accept_counter"
+                        action="brandProceedToPayment"
+                        :error="$brandErrorMessage"
+                        back-action="$set('showCounterAcceptStep', false)"
+                        back-label="← Back to counter-offer"
+                    />
                 @endif
+            @endif
+
+            @if($this->isBrandUser() && $booking->canProceedInquiryPayment())
+                <x-bookings.inquiry-payment-step
+                    :booking="$booking"
+                    purpose="respond"
+                    action="brandProceedApprovedInquiryToPayment"
+                    :error="$brandErrorMessage"
+                />
             @endif
 
             @if($this->isCreator() && $booking->status === \App\Enums\BookingStatus::PENDING_PAYMENT && $booking->isCreatorInitiated())
@@ -417,7 +428,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                 </div>
             @endif
 
-            @if($this->isBrandUser() && $booking->canApprove())
+            @if($this->isBrandUser() && $booking->canReviewSubmittedWork())
                 <div class="rounded-lg border border-green-200 bg-green-50 p-6 dark:border-green-700 dark:bg-green-950">
                     <flux:heading size="lg" class="mb-2">Review Submitted Work</flux:heading>
                     <flux:text class="mb-4 text-zinc-600 dark:text-zinc-400">

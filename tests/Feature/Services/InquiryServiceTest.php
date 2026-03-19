@@ -27,11 +27,11 @@ beforeEach(function () {
     Notification::fake();
 });
 
-test('approveInquiry sets status to processing and generates a respond token', function () {
+test('approveInquiry sets status to pending payment and generates a respond token', function () {
     $result = $this->service->approveInquiry($this->booking);
 
     expect($result['success'])->toBeTrue();
-    expect($this->booking->fresh()->status)->toBe(BookingStatus::PROCESSING);
+    expect($this->booking->fresh()->status)->toBe(BookingStatus::PENDING_PAYMENT);
 
     $token = BookingInquiryToken::where('booking_id', $this->booking->id)
         ->where('purpose', 'respond')
@@ -129,7 +129,7 @@ test('fulfillInquiryBooking returns error when status does not allow fulfillment
 });
 
 test('fulfillInquiryBooking updates requirement_data and changes status to pending_payment', function () {
-    $this->booking->update(['status' => BookingStatus::PROCESSING]);
+    $this->booking->update(['status' => BookingStatus::PENDING_PAYMENT]);
 
     // Bypass actual payment: swap payment service to avoid real Stripe call
     $mockPayment = Mockery::mock(\App\Services\PaymentService::class);
@@ -147,6 +147,18 @@ test('fulfillInquiryBooking updates requirement_data and changes status to pendi
     $fresh = $this->booking->fresh();
     expect($fresh->status)->toBe(BookingStatus::PENDING_PAYMENT)
         ->and($fresh->requirement_data['campaign_name'])->toBe('Summer Campaign');
+});
+
+test('pending payment inquiry without submission can proceed to payment but cannot be approved as submitted work', function () {
+    $this->booking->update([
+        'status' => BookingStatus::PENDING_PAYMENT,
+    ]);
+
+    $fresh = $this->booking->fresh();
+
+    expect($fresh->canProceedInquiryPayment())->toBeTrue()
+        ->and($fresh->canApprove())->toBeFalse()
+        ->and($fresh->canReviewSubmittedWork())->toBeFalse();
 });
 
 test('fulfillInquiryBooking accepting counter updates amount_paid to counter_amount', function () {
