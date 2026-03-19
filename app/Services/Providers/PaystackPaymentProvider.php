@@ -8,6 +8,7 @@ use App\Models\BookingPayment;
 use App\Models\PaymentConfiguration;
 use App\Models\Workspace;
 use App\Notifications\PaymentReceivedNotification;
+use App\Services\ExchangeRateService;
 use App\Services\GuestAccountCreationService;
 use App\Services\PaymentProviderInterface;
 use Illuminate\Support\Facades\Http;
@@ -133,11 +134,33 @@ class PaystackPaymentProvider implements PaymentProviderInterface
             $payment = BookingPayment::findByProviderReference('paystack', $reference);
 
             if ($payment) {
+                $paidAmount = $this->convertFromSmallestUnit($data['data']['amount'], $payment->currency);
+                $conversion = [
+                    'amount_usd' => $payment->currency === 'USD' ? $paidAmount : $payment->amount_usd,
+                    'exchange_rate_to_usd' => $payment->currency === 'USD' ? 1 : $payment->exchange_rate_to_usd,
+                    'provider' => $payment->currency === 'USD' ? 'identity' : $payment->exchange_rate_provider,
+                    'fetched_at' => $payment->exchange_rate_fetched_at,
+                ];
+
+                try {
+                    $conversion = app(ExchangeRateService::class)->convertToUsd($paidAmount, $payment->currency);
+                } catch (\Throwable $exception) {
+                    Log::warning('Unable to refresh USD conversion for Paystack payment', [
+                        'payment_id' => $payment->id,
+                        'reference' => $reference,
+                        'error' => $exception->getMessage(),
+                    ]);
+                }
+
                 $payment->update([
                     'provider_transaction_id' => $data['data']['id'],
                     'status' => 'completed',
                     'paid_at' => now(),
-                    'amount' => $this->convertFromSmallestUnit($data['data']['amount'], $payment->currency),
+                    'amount' => $paidAmount,
+                    'amount_usd' => $conversion['amount_usd'],
+                    'exchange_rate_to_usd' => $conversion['exchange_rate_to_usd'],
+                    'exchange_rate_provider' => $conversion['provider'],
+                    'exchange_rate_fetched_at' => $conversion['fetched_at'],
                     'provider_data' => array_merge(
                         $payment->provider_data ?? [],
                         [

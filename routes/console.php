@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('reservations:cleanup')->everyFiveMinutes();
+Schedule::command('exchange-rates:sync')->daily();

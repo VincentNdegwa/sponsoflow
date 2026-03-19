@@ -2,6 +2,7 @@
 
 use App\Enums\BookingStatus;
 use App\Models\Booking;
+use App\Models\BookingPayment;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -10,10 +11,27 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
+    public string $creatorRevenueCurrency = 'local';
+
+    public function setCreatorRevenueCurrency(string $currency): void
+    {
+        if (! in_array($currency, ['local', 'usd'], true)) {
+            return;
+        }
+
+        $this->creatorRevenueCurrency = $currency;
+    }
+
     #[Computed]
     public function workspace()
     {
         return currentWorkspace();
+    }
+
+    #[Computed]
+    public function isCreatorUsdView(): bool
+    {
+        return $this->creatorRevenueCurrency === 'usd';
     }
 
     #[Computed]
@@ -29,13 +47,22 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
 
         if ($this->isCreator) {
             $base = $workspace->bookings();
+            $payments = BookingPayment::query()
+                ->where('status', 'completed')
+                ->whereHas('booking', fn ($query) => $query->where('workspace_id', $workspace->id));
+
+            $totalRevenueLocal = (float) (clone $payments)->sum('amount');
+            $totalRevenueUsd = (float) (clone $payments)->sum('amount_usd');
+
+            $displayCurrency = $this->isCreatorUsdView ? 'USD' : ($workspace->currency ?? 'USD');
+            $displayAmount = $this->isCreatorUsdView ? $totalRevenueUsd : $totalRevenueLocal;
 
             return [
                 [
                     'label' => 'Total Revenue',
-                    'value' => formatMoney((float) (clone $base)->where('status', BookingStatus::COMPLETED)->sum('amount_paid'), $workspace),
+                    'value' => formatMoney($displayAmount, $workspace, $displayCurrency),
                     'icon' => 'banknotes',
-                    'sub' => 'Lifetime earnings',
+                    'sub' => $this->isCreatorUsdView ? 'Lifetime earnings (USD)' : 'Lifetime earnings (local)',
                 ],
                 [
                     'label' => 'Active Bookings',
@@ -59,13 +86,16 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
         }
 
         $base = Booking::where('brand_workspace_id', $workspace->id);
+        $payments = BookingPayment::query()
+            ->where('status', 'completed')
+            ->whereHas('booking', fn ($query) => $query->where('brand_workspace_id', $workspace->id));
 
         return [
             [
                 'label' => 'Total Spent',
-                'value' => formatMoney((float) (clone $base)->where('status', BookingStatus::COMPLETED)->sum('amount_paid'), $workspace),
+                'value' => formatMoney((float) (clone $payments)->sum('amount_usd'), $workspace, 'USD'),
                 'icon' => 'banknotes',
-                'sub' => 'Lifetime investment',
+                'sub' => 'Lifetime investment (USD)',
             ],
             [
                 'label' => 'Active Campaigns',
@@ -95,14 +125,14 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
 
         if ($this->isCreator) {
             return $workspace->bookings()
-                ->with(['product', 'brandUser', 'brandWorkspace'])
+                ->with(['product', 'brandUser', 'brandWorkspace', 'latestPayment'])
                 ->latest()
                 ->limit(6)
                 ->get();
         }
 
         return Booking::where('brand_workspace_id', $workspace->id)
-            ->with(['product', 'creator', 'workspace'])
+            ->with(['product', 'creator', 'workspace', 'latestPayment'])
             ->latest()
             ->limit(6)
             ->get();
@@ -122,21 +152,26 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
                     ->whereMonth('created_at', $month->month)
                     ->whereYear('created_at', $month->year)
                     ->count();
-                $revenue = (float) $workspace->bookings()
-                    ->whereMonth('created_at', $month->month)
-                    ->whereYear('created_at', $month->year)
-                    ->where('status', BookingStatus::COMPLETED)
-                    ->sum('amount_paid');
+                $payments = BookingPayment::query()
+                    ->where('status', 'completed')
+                    ->whereMonth('paid_at', $month->month)
+                    ->whereYear('paid_at', $month->year)
+                    ->whereHas('booking', fn ($query) => $query->where('workspace_id', $workspace->id));
+
+                $revenue = $this->isCreatorUsdView
+                    ? (float) (clone $payments)->sum('amount_usd')
+                    : (float) (clone $payments)->sum('amount');
             } else {
                 $count = Booking::where('brand_workspace_id', $workspace->id)
                     ->whereMonth('created_at', $month->month)
                     ->whereYear('created_at', $month->year)
                     ->count();
-                $revenue = (float) Booking::where('brand_workspace_id', $workspace->id)
-                    ->whereMonth('created_at', $month->month)
-                    ->whereYear('created_at', $month->year)
-                    ->where('status', BookingStatus::COMPLETED)
-                    ->sum('amount_paid');
+                $revenue = (float) BookingPayment::query()
+                    ->where('status', 'completed')
+                    ->whereMonth('paid_at', $month->month)
+                    ->whereYear('paid_at', $month->year)
+                    ->whereHas('booking', fn ($query) => $query->where('brand_workspace_id', $workspace->id))
+                    ->sum('amount_usd');
             }
 
             return [
@@ -201,6 +236,25 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
                 @endif
             </flux:subheading>
         </div>
+
+        @if ($this->isCreator)
+            <div class="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-900">
+                <flux:button
+                    wire:click="setCreatorRevenueCurrency('local')"
+                    size="sm"
+                    :variant="$this->isCreatorUsdView ? 'ghost' : 'primary'"
+                >
+                    Local
+                </flux:button>
+                <flux:button
+                    wire:click="setCreatorRevenueCurrency('usd')"
+                    size="sm"
+                    :variant="$this->isCreatorUsdView ? 'primary' : 'ghost'"
+                >
+                    USD
+                </flux:button>
+            </div>
+        @endif
 
         <div class="flex items-center gap-2">
             @if ($this->isCreator)
@@ -292,7 +346,15 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
                                         {{ $booking->status->label() }}
                                     </flux:badge>
                                     <span class="w-20 text-right text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                                        {{ $booking->formatAmount() }}
+                                        @if ($this->isCreator)
+                                            @if ($this->isCreatorUsdView)
+                                                {{ formatMoney((float) ($booking->latestPayment?->amount_usd ?? 0), $this->workspace, 'USD') }}
+                                            @else
+                                                {{ $booking->formatAmount((float) ($booking->latestPayment?->amount ?? $booking->amount_paid)) }}
+                                            @endif
+                                        @else
+                                            {{ formatMoney((float) ($booking->latestPayment?->amount_usd ?? 0), $this->workspace, 'USD') }}
+                                        @endif
                                     </span>
                                 </div>
                             </a>

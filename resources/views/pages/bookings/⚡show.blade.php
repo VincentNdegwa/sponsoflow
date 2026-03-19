@@ -189,6 +189,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
 
         if ($result['success']) {
             $this->booking->refresh();
+            $this->showApproveModal = false;
             $this->dispatch('success', 'Work approved! Payment has been released to the creator.');
         } else {
             $this->dispatch('error', $result['error']);

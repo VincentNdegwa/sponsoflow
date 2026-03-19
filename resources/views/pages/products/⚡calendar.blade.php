@@ -123,7 +123,7 @@ new #[Layout('layouts::app'), Title('Product Calendar')] class extends Component
 
             <div class="flex items-center gap-4">
                 <flux:heading size="lg">
-                    {{ $this->currentDate->format('F Y') }}
+                    {{ formatWorkspaceDate($this->currentDate) }}
                 </flux:heading>
                 <flux:button wire:click="goToToday" variant="ghost" size="sm">
                     Today
@@ -168,10 +168,10 @@ new #[Layout('layouts::app'), Title('Product Calendar')] class extends Component
                                     class="bg-green-100 dark:bg-green-900/40 border border-green-200 dark:border-green-800 rounded px-1.5 py-1 text-[10px] leading-tight shadow-xs">
                                     <div class="flex items-center justify-between gap-1">
                                         <span class="text-green-800 dark:text-green-300 font-bold truncate">
-                                            {{ $slot->slot_time ? $slot->slot_time->format('H:i') : 'Available' }}
+                                            {{ $slot->slot_time ? formatWorkspaceTime($slot->slot_time) : 'Available' }}
                                         </span>
                                         <span class="text-green-700 dark:text-green-400">
-                                            ${{ number_format($slot->price, 0) }}
+                                            {{ formatMoney((float) $slot->price, $product->workspace) }}
                                         </span>
                                     </div>
                                 </div>
@@ -196,7 +196,7 @@ new #[Layout('layouts::app'), Title('Product Calendar')] class extends Component
             <flux:text class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Potential Revenue
             </flux:text>
             <flux:heading size="lg" class="mt-1 text-green-600 dark:text-green-400">
-                ${{ number_format($this->availableSlots->flatten()->sum('price'), 0) }}
+                {{ formatMoney($this->availableSlots->flatten()->sum('price')) }}
             </flux:heading>
         </div>
 

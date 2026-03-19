@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use App\Enums\BookingStatus;
+use App\Services\ExchangeRateService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Log;
 
 class BookingPayment extends Model
 {
@@ -19,7 +21,11 @@ class BookingPayment extends Model
         'session_id',
         'status',
         'amount',
+        'amount_usd',
         'currency',
+        'exchange_rate_to_usd',
+        'exchange_rate_provider',
+        'exchange_rate_fetched_at',
         'provider_data',
         'metadata',
         'paid_at',
@@ -33,6 +39,9 @@ class BookingPayment extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'amount_usd' => 'decimal:2',
+            'exchange_rate_to_usd' => 'decimal:10',
+            'exchange_rate_fetched_at' => 'datetime',
             'provider_data' => 'array',
             'metadata' => 'array',
             'paid_at' => 'datetime',
@@ -111,7 +120,7 @@ class BookingPayment extends Model
         $this->booking->update(['status' => BookingStatus::CONFIRMED]);
     }
 
-    public function markAsFailed(string $reason = null): void
+    public function markAsFailed(?string $reason = null): void
     {
         $this->update([
             'status' => 'failed',
@@ -120,7 +129,7 @@ class BookingPayment extends Model
         ]);
     }
 
-    public function markAsRefunded(string $reason = null): void
+    public function markAsRefunded(?string $reason = null): void
     {
         $this->update([
             'status' => 'refunded',
@@ -131,13 +140,41 @@ class BookingPayment extends Model
 
     public static function createForBooking(Booking $booking, string $provider, array $data): self
     {
+        $currency = $data['currency'] ?? 'USD';
+        $amount = (float) ($data['amount'] ?? $booking->amount_paid);
+
+        $conversionData = [
+            'amount_usd' => $currency === 'USD' ? $amount : null,
+            'exchange_rate_to_usd' => $currency === 'USD' ? 1 : null,
+            'exchange_rate_provider' => $currency === 'USD' ? 'identity' : null,
+            'exchange_rate_fetched_at' => $currency === 'USD' ? now() : null,
+        ];
+
+        try {
+            $converted = app(ExchangeRateService::class)->convertToUsd($amount, $currency);
+            $conversionData = [
+                'amount_usd' => $converted['amount_usd'],
+                'exchange_rate_to_usd' => $converted['exchange_rate_to_usd'],
+                'exchange_rate_provider' => $converted['provider'],
+                'exchange_rate_fetched_at' => $converted['fetched_at'],
+            ];
+        } catch (\Throwable $exception) {
+            Log::warning('Failed to convert booking payment amount to USD at creation time', [
+                'booking_id' => $booking->id,
+                'provider' => $provider,
+                'currency' => $currency,
+                'amount' => $amount,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
         return static::create(array_merge([
             'booking_id' => $booking->id,
             'provider' => $provider,
-            'amount' => $booking->amount_paid,
-            'currency' => $data['currency'] ?? 'USD',
+            'amount' => $amount,
+            'currency' => $currency,
             'status' => 'pending',
-        ], $data));
+        ], $conversionData, $data));
     }
 
     public static function findByProviderReference(string $provider, string $reference): ?self
