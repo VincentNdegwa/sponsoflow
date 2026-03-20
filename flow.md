@@ -85,3 +85,9 @@ The Conflict Handler: Notifications to the Admin (You) if a Brand files a "Dispu
 Platform Success Fee: A dynamic % taken from every transaction.
 
 Subscription Upgrades: "Pro" Workspaces unlock custom domains, advanced analytics, and the ability to remove "Powered by SponsorFlow" branding.
+
+
+7. Markeplace for brands
+8. Campaings for brands
+9. Colloborations for creators
+10. Analytics for creators and brands

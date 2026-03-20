@@ -503,8 +503,12 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                     <div class="space-y-4">
                         @foreach($booking->requirement_data as $key => $value)
                             @if($value)
+                                @php
+                                    $requirement = $booking->product->requirements->firstWhere('id', (int) $key);
+                                    $questionLabel = $requirement?->name ?? ucfirst(str_replace('_', ' ', (string) $key));
+                                @endphp
                                 <div>
-                                    <flux:text class="text-sm font-medium text-zinc-500">{{ ucfirst(str_replace('_', ' ', $key)) }}</flux:text>
+                                    <flux:text class="text-sm font-medium text-zinc-500">{{ $questionLabel }}</flux:text>
                                     <flux:text class="mt-1">{{ is_array($value) ? implode(', ', $value) : $value }}</flux:text>
                                 </div>
                             @endif

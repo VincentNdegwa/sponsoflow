@@ -38,6 +38,8 @@ class PaystackPaymentProvider implements PaymentProviderInterface
             $currency = $workspace->currency;
             $platformFeePercentage = $config->platform_fee_percentage;
             $creatorPercentage = 100 - $platformFeePercentage;
+            $platformFeeAmount = round($booking->amount_paid * ($platformFeePercentage / 100), 2);
+            $creatorPayoutEstimate = max(round($booking->amount_paid - $platformFeeAmount, 2), 0);
 
             $reference = 'SPONSOR_'.$booking->id.'_'.Str::random(8);
 
@@ -50,7 +52,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'subaccount' => $config->provider_account_id,
                 'bearer' => 'subaccount',
                 'transaction_charge' => $this->convertToSmallestUnit(
-                    $booking->amount_paid * ($platformFeePercentage / 100),
+                    $platformFeeAmount,
                     $currency
                 ),
                 'metadata' => [
@@ -93,7 +95,9 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                     'access_code' => $data['data']['access_code'],
                     'authorization_url' => $data['data']['authorization_url'],
                     'platform_fee_percentage' => $platformFeePercentage,
+                    'platform_fee_amount' => $platformFeeAmount,
                     'creator_percentage' => $creatorPercentage,
+                    'creator_payout_estimate' => $creatorPayoutEstimate,
                     'subaccount_code' => $config->provider_account_id,
                     'currency' => $currency,
                 ],
@@ -135,6 +139,12 @@ class PaystackPaymentProvider implements PaymentProviderInterface
 
             if ($payment) {
                 $paidAmount = $this->convertFromSmallestUnit($data['data']['amount'], $payment->currency);
+                $platformFeePercentage = (float) data_get($payment->provider_data, 'platform_fee_percentage', 0);
+                $platformFeeAmount = round($paidAmount * ($platformFeePercentage / 100), 2);
+                $processorFeeAmount = isset($data['data']['fees'])
+                    ? $this->convertFromSmallestUnit((int) $data['data']['fees'], $payment->currency)
+                    : null;
+                $escrowAmount = max(round($paidAmount - $platformFeeAmount, 2), 0);
                 $conversion = [
                     'amount_usd' => $payment->currency === 'USD' ? $paidAmount : $payment->amount_usd,
                     'exchange_rate_to_usd' => $payment->currency === 'USD' ? 1 : $payment->exchange_rate_to_usd,
@@ -157,6 +167,10 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                     'status' => 'completed',
                     'paid_at' => now(),
                     'amount' => $paidAmount,
+                    'processor_fee_amount' => $processorFeeAmount,
+                    'platform_fee_amount' => $platformFeeAmount,
+                    'escrow_amount' => $escrowAmount,
+                    'creator_payout_amount' => $escrowAmount,
                     'amount_usd' => $conversion['amount_usd'],
                     'exchange_rate_to_usd' => $conversion['exchange_rate_to_usd'],
                     'exchange_rate_provider' => $conversion['provider'],
@@ -165,6 +179,16 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                         $payment->provider_data ?? [],
                         [
                             'transaction_data' => $data['data'],
+                            'payment_breakdown' => [
+                                'gross_amount' => $paidAmount,
+                                'platform_fee_amount' => $platformFeeAmount,
+                                'processor_fee_amount' => $processorFeeAmount,
+                                'escrow_amount' => $escrowAmount,
+                                'creator_payout_amount' => $escrowAmount,
+                                'requested_amount' => isset($data['data']['requested_amount'])
+                                    ? $this->convertFromSmallestUnit((int) $data['data']['requested_amount'], $payment->currency)
+                                    : null,
+                            ],
                             'verified_at' => now()->toISOString(),
                         ]
                     ),
@@ -186,7 +210,15 @@ class PaystackPaymentProvider implements PaymentProviderInterface
 
                 $booking = $payment->booking->load(['product', 'creator']);
                 if ($booking->creator) {
-                    $booking->creator->notify(new PaymentReceivedNotification($booking));
+                    try {
+                        $booking->creator->notify(new PaymentReceivedNotification($booking));
+                    } catch (\Throwable $exception) {
+                        Log::warning('Failed to dispatch creator payment notification', [
+                            'booking_id' => $payment->booking_id,
+                            'payment_id' => $payment->id,
+                            'error' => $exception->getMessage(),
+                        ]);
+                    }
                 }
 
                 Log::info('Paystack payment confirmed for booking', [
@@ -235,10 +267,12 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'provider' => 'paystack',
             ])->first();
 
+            $platformFeePercentage = $this->resolvePlatformFeePercentage($existingConfig);
+
             $subaccountCode = null;
             $subaccountId = null;
             $businessName = $workspace->name;
-            $percentageCharge = 90;
+            $percentageCharge = $platformFeePercentage;
             $settlementSchedule = 'manual';
 
             if ($existingConfig && $existingConfig->provider_account_id) {
@@ -248,7 +282,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                     'business_name' => $workspace->name,
                     'settlement_bank' => $bankDetails['bank_code'],
                     'account_number' => $bankDetails['account_number'],
-                    'percentage_charge' => 90,
+                    'percentage_charge' => $platformFeePercentage,
                     'description' => 'Creator subaccount for '.$workspace->name,
                     'primary_contact_email' => $owner->email,
                     'primary_contact_name' => $owner->name,
@@ -270,7 +304,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
 
                 $subaccountId = $updateData['data']['id'] ?? $existingConfig->provider_data['subaccount_id'] ?? null;
                 $businessName = $updateData['data']['business_name'] ?? $workspace->name;
-                $percentageCharge = $updateData['data']['percentage_charge'] ?? 90;
+                $percentageCharge = $updateData['data']['percentage_charge'] ?? $platformFeePercentage;
                 $settlementSchedule = $updateData['data']['settlement_schedule'] ?? 'manual';
 
                 Log::info('Paystack subaccount updated', [
@@ -282,7 +316,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                     'business_name' => $workspace->name,
                     'settlement_bank' => $bankDetails['bank_code'],
                     'account_number' => $bankDetails['account_number'],
-                    'percentage_charge' => 90,
+                    'percentage_charge' => $platformFeePercentage,
                     'description' => 'Creator subaccount for '.$workspace->name,
                     'primary_contact_email' => $owner->email,
                     'primary_contact_name' => $owner->name,
@@ -325,6 +359,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                     'is_active' => true,
                     'is_verified' => true,
                     'verified_at' => now(),
+                    'platform_fee_percentage' => $platformFeePercentage,
                     'provider_data' => [
                         'subaccount_id' => $subaccountId,
                         'business_name' => $businessName,
@@ -379,8 +414,23 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 throw new \Exception("No active Paystack configuration found for workspace {$workspace->id}");
             }
 
-            $platformFeeAmount = $booking->amount_paid * ($config->platform_fee_percentage / 100);
-            $creatorAmount = $booking->amount_paid - $platformFeeAmount;
+            $payment = $booking->getPaymentFor('paystack');
+
+            if (! $payment || ! $payment->isCompleted()) {
+                throw new \Exception('No completed Paystack payment found for booking');
+            }
+
+            $platformFeeAmount = $payment->platform_fee_amount ?? round($booking->amount_paid * ($config->platform_fee_percentage / 100), 2);
+            $creatorAmount = $payment->creator_payout_amount ?? max(round($payment->amount - $platformFeeAmount, 2), 0);
+
+            if ($payment->creator_released_at) {
+                Log::warning('Attempted to release Paystack funds more than once', [
+                    'booking_id' => $booking->id,
+                    'payment_id' => $payment->id,
+                ]);
+
+                return false;
+            }
 
             $recipientCode = $this->createTransferRecipient($config, $workspace->currency);
 
@@ -410,6 +460,19 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'booking_id' => $booking->id,
                 'transfer_code' => $data['data']['transfer_code'],
                 'amount' => $creatorAmount,
+            ]);
+
+            $payment->update([
+                'creator_released_amount' => $creatorAmount,
+                'creator_released_at' => now(),
+                'provider_data' => array_merge(
+                    $payment->provider_data ?? [],
+                    [
+                        'funds_released' => true,
+                        'released_at' => now()->toISOString(),
+                        'release_transfer_data' => $data['data'],
+                    ]
+                ),
             ]);
 
             return true;
@@ -557,6 +620,19 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         } catch (\Exception $e) {
             return 'Unknown Bank';
         }
+    }
+
+    protected function resolvePlatformFeePercentage(?PaymentConfiguration $existingConfig): float
+    {
+        $percentage = $existingConfig?->platform_fee_percentage;
+
+        if ($percentage === null) {
+            $percentage = 10;
+        }
+
+        $normalizedPercentage = max(0, min(100, (float) $percentage));
+
+        return round($normalizedPercentage, 4);
     }
 
     protected function createTransferRecipient(PaymentConfiguration $config, string $currency): string

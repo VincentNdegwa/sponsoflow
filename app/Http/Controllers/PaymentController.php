@@ -16,6 +16,10 @@ class PaymentController extends Controller
             $sessionId = $request->query('session_id');
 
             if (! $sessionId) {
+                if ($request->session()->has('message') || $request->session()->has('success')) {
+                    return view('payment.success')->with('success', $request->session()->get('success', $request->session()->get('message')));
+                }
+
                 return redirect()->route('home')->with('error', 'Invalid payment session.');
             }
 
