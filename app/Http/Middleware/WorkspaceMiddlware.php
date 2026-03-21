@@ -32,7 +32,7 @@ class WorkspaceMiddlware
         session(['current_workspace_id' => $workspace->id]);
         View::share('currentWorkspace', $workspace);
         app()->instance('current.workspace', $workspace);
-        
+
         return $next($request);
     }
 }

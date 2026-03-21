@@ -62,6 +62,9 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
     #[Computed]
     public function isGuestUser(): bool
     {
+        \Log::info("brand user",[
+            "data"=> $this->brandUser
+        ]);
         return !$this->brandUser;
     }
     
@@ -99,6 +102,11 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
         $this->workspace = $user->currentWorkspace();
         $this->brandUser = auth()->user();
         $this->brandWorkspace = $this->brandUser?->currentWorkspace();
+
+        \Log::info(" mount brand user",[
+            "data"=> $this->brandUser,
+            'user' => $this->user
+        ]);
 
         $this->fillGuestDataFromAuth();
     }
@@ -690,13 +698,11 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
             @endif
 
             <div class="space-y-8 flex-1">
-                <div class="space-y-6">
-                    <flux:heading size="md" class="text-accent">
-                        {{ $checkoutType === 'instant' ? 'Contact Information' : 'Brand Information' }}
-                    </flux:heading>
+                @if ($this->isGuestUser)
+                    <div class="space-y-6">
+                        <flux:heading size="md" class="text-accent">Brand Information</flux:heading>
 
-                    <div class="space-y-4">
-                        @if ($this->isGuestUser)
+                        <div class="space-y-4">
                             <flux:input wire:model="guestData.name" label="Full Name" placeholder="Your full name"
                                 required />
                             <flux:input wire:model="guestData.email" label="Email Address" type="email"
@@ -710,24 +716,9 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
                                         placeholder="https://yourbrand.com" />
                                 @endif
                             </div>
-                        @else
-                            <div
-                                class="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <flux:icon.user-circle class="w-5 h-5 text-blue-600" />
-                                    <flux:text class="font-semibold text-blue-800 dark:text-blue-200">Booking as
-                                        {{ $brandUser->name }}</flux:text>
-                                </div>
-                                <flux:text size="sm" class="text-blue-600 dark:text-blue-300">
-                                    {{ $brandUser->email }}
-                                    @if ($brandWorkspace)
-                                        • {{ $brandWorkspace->name }}
-                                    @endif
-                                </flux:text>
-                            </div>
-                        @endif
+                        </div>
                     </div>
-                </div>
+                @endif
 
                 @if ($checkoutType === 'inquiry')
                     <div class="space-y-6">
