@@ -2,6 +2,7 @@
 
 use App\Enums\BookingStatus;
 use App\Models\Booking;
+use App\Models\WorkspaceRating;
 use App\Services\BookingService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -28,6 +29,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
     public bool $showRevisionForm = false;
     public bool $showDisputeForm = false;
     public bool $showApproveModal = false;
+    public bool $showRatingPrompt = false;
 
     // Inquiry actions
     public bool $showRejectModal = false;
@@ -41,6 +43,14 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
     public array $requirementData = [];
     public bool $brandIsProcessing = false;
     public ?string $brandErrorMessage = null;
+
+    public bool $ratingSubmitted = false;
+    public int $ratingValue = 0;
+    public array $selectedTags = [];
+    public string $ratingComment = '';
+
+    /** @var array<string> */
+    public array $availableTags = ['Professional', 'Fast Delivery', 'Great Quality', 'Creative'];
 
     public function mount(Booking $booking): void
     {
@@ -200,10 +210,75 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
         if ($result['success']) {
             $this->booking->refresh();
             $this->showApproveModal = false;
-            $this->dispatch('success', 'Work approved! Payment has been released to the creator.');
+
+            if ($this->hasExistingRating($this->booking)) {
+                $this->dispatch('success', 'Work approved! Payment has been released to the creator.');
+
+                return;
+            }
+
+            $this->showRatingPrompt = true;
+            $this->dispatch('success', 'Work approved! Payment has been released. You can now rate the creator.');
         } else {
             $this->dispatch('error', $result['error']);
         }
+    }
+
+    public function setRating(int $value): void
+    {
+        $this->ratingValue = $value;
+    }
+
+    public function toggleTag(string $tag): void
+    {
+        if (in_array($tag, $this->selectedTags, true)) {
+            $this->selectedTags = array_values(array_filter($this->selectedTags, fn ($selectedTag) => $selectedTag !== $tag));
+
+            return;
+        }
+
+        $this->selectedTags[] = $tag;
+    }
+
+    public function submitRating(?int $ratingValue = null, ?array $selectedTags = null, ?string $ratingComment = null): void
+    {
+        if ($ratingValue !== null) {
+            $this->ratingValue = $ratingValue;
+        }
+
+        if ($selectedTags !== null) {
+            $this->selectedTags = $selectedTags;
+        }
+
+        if ($ratingComment !== null) {
+            $this->ratingComment = $ratingComment;
+        }
+
+        $this->validate(['ratingValue' => 'required|integer|min:1|max:5']);
+
+        $result = app(BookingService::class)->submitRating(
+            $this->booking,
+            $this->ratingValue,
+            $this->selectedTags,
+            $this->ratingComment ?: null,
+        );
+
+        if (! $result['success']) {
+            $this->dispatch('error', $result['error']);
+
+            return;
+        }
+
+        $this->ratingSubmitted = true;
+        $this->showRatingPrompt = false;
+        $this->resetRatingState();
+        $this->dispatch('success', 'Thanks for the rating!');
+    }
+
+    public function skipRating(): void
+    {
+        $this->showRatingPrompt = false;
+        $this->resetRatingState();
     }
 
     public function requestRevision(): void
@@ -249,6 +324,20 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
 
         return Auth::id() === $this->booking->brand_user_id
             || ($workspace && $workspace->id === $this->booking->brand_workspace_id);
+    }
+
+    private function hasExistingRating(Booking $booking): bool
+    {
+        return WorkspaceRating::query()
+            ->where('booking_id', $booking->id)
+            ->exists();
+    }
+
+    private function resetRatingState(): void
+    {
+        $this->ratingValue = 0;
+        $this->selectedTags = [];
+        $this->ratingComment = '';
     }
 }; ?>
 
@@ -609,4 +698,13 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
     <x-bookings.dispute-modal :booking="$booking" />
     <x-bookings.reject-inquiry-modal :booking="$booking" />
     <x-bookings.counter-inquiry-modal :booking="$booking" />
+
+    <flux:modal wire:model.self="showRatingPrompt" class="md:w-2xl">
+        <x-bookings.rating-prompt
+            :creator-name="$booking->product?->workspace?->name ?? $booking->creator?->name"
+            :rating-value="$ratingValue"
+            :selected-tags="$selectedTags"
+            :available-tags="$availableTags"
+        />
+    </flux:modal>
 </div>

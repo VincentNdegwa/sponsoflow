@@ -27,6 +27,12 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                 $this->creatorProductId = $products->first()->id;
                 $this->creatorAmount = (string) $products->first()->base_price;
             }
+
+            $previousBrands = $this->previousBrands;
+
+            if ($previousBrands->isNotEmpty()) {
+                $this->existingBrandWorkspaceId = (int) $previousBrands->first()->id;
+            }
         }
 
         if (isBrandWorkspace()) {
@@ -59,7 +65,7 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
     public ?int $creatorProductId = null;
     public string $creatorAmount = '';
     public string $creatorNotes = '';
-    public string $brandType = 'new'; // 'new' | 'existing'
+    public string $brandType = 'existing'; // 'new' | 'existing'
     public ?int $existingBrandWorkspaceId = null;
     public string $brandName = '';
     public string $brandEmail = '';
@@ -567,7 +573,7 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                         @if($brandType === 'existing' && $this->previousBrands->isNotEmpty())
                             <flux:field>
                                 <flux:label>Select brand *</flux:label>
-                                <flux:select wire:model="existingBrandWorkspaceId" placeholder="Choose a brand…">
+                                <flux:select wire:model.live="existingBrandWorkspaceId" placeholder="Choose a brand…">
                                     @foreach($this->previousBrands as $brand)
                                         <flux:select.option value="{{ $brand->id }}">{{ $brand->name }}</flux:select.option>
                                     @endforeach
