@@ -18,14 +18,13 @@ class WorkspaceMiddlware
     public function handle(Request $request, Closure $next): Response
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             return $next($request);
         }
 
         $workspace = $user->workspaces()->first();
-        if (!$workspace) {
-            Auth::logout();
-            return redirect()->route('login')->withErrors(['message' => 'Your account is not associated with any workspace. Please contact support.']);
+        if (! $workspace) {
+            return $next($request);
         }
 
         $request->attributes->set('current_workspace', $workspace);

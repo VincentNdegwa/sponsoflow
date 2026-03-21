@@ -45,6 +45,35 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
     {
         $workspace = $this->workspace;
 
+        if (! $workspace) {
+            return [
+                [
+                    'label' => 'Total Spent',
+                    'value' => formatMoney(0, null, 'USD'),
+                    'icon' => 'banknotes',
+                    'sub' => 'Lifetime investment (USD)',
+                ],
+                [
+                    'label' => 'Active Campaigns',
+                    'value' => 0,
+                    'icon' => 'arrow-path',
+                    'sub' => 'Currently running',
+                ],
+                [
+                    'label' => 'Open Inquiries',
+                    'value' => 0,
+                    'icon' => 'inbox',
+                    'sub' => 'Pending response',
+                ],
+                [
+                    'label' => 'Completed',
+                    'value' => 0,
+                    'icon' => 'check-circle',
+                    'sub' => 'All time',
+                ],
+            ];
+        }
+
         if ($this->isCreator) {
             $financialPayments = BookingPayment::query()
                 ->select('booking_payments.*', 'bookings.status as booking_status')
@@ -165,6 +194,10 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
     {
         $workspace = $this->workspace;
 
+        if (! $workspace) {
+            return collect();
+        }
+
         if ($this->isCreator) {
             return $workspace->bookings()
                 ->with(['product', 'brandUser', 'brandWorkspace', 'latestPayment'])
@@ -185,6 +218,14 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
     {
         $workspace = $this->workspace;
         $isCreator = $this->isCreator;
+
+        if (! $workspace) {
+            return collect(range(5, 0))->map(fn ($i) => [
+                'label' => Carbon::now()->subMonths($i)->format('M'),
+                'count' => 0,
+                'revenue' => 0.0,
+            ])->toArray();
+        }
 
         return collect(range(5, 0))->map(function ($i) use ($workspace, $isCreator) {
             $month = Carbon::now()->subMonths($i);
@@ -228,6 +269,10 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
     public function statusBreakdown(): array
     {
         $workspace = $this->workspace;
+
+        if (! $workspace) {
+            return [];
+        }
 
         $query = $this->isCreator
             ? $workspace->bookings()

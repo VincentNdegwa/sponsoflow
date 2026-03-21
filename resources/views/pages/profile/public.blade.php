@@ -71,6 +71,15 @@ new #[Title('Public Profile')] class extends Component {
 
         $this->dispatch('profile-updated', name: $user->name);
     }
+
+    public function previewProfile(): void
+    {
+        if (empty($this->profileData['public_slug'])) {
+            return;
+        }
+
+        $this->dispatch('open-preview', route('creator.show', $this->profileData['public_slug']));
+    }
 }; ?>
 
 <section class="w-full">
