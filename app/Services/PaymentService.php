@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Booking;
+use App\Models\BookingPayment;
 use App\Models\PaymentConfiguration;
 use App\Models\Workspace;
 use App\Services\Providers\StripePaymentProvider;
@@ -11,7 +12,10 @@ class PaymentService
 {
     private const string ACTIVE_PROVIDER = 'paystack';
 
-    protected array $providers = [];
+    /**
+     * @var array<string, class-string<PaymentProviderInterface>>
+     */
+    protected array $providers;
 
     public function __construct()
     {
@@ -24,61 +28,30 @@ class PaymentService
     public function createCheckoutSession(Booking $booking, string $brandCountry = 'global'): array
     {
         $workspace = $booking->product->workspace;
-        $paymentConfig = $workspace->activePaymentConfiguration(self::ACTIVE_PROVIDER);
-
-        if (! $paymentConfig) {
-            throw new \Exception("No active payment configuration found for workspace: {$workspace->name} with provider: ".self::ACTIVE_PROVIDER);
-        }
-
-        $provider = $this->getProvider($paymentConfig);
+        $paymentConfig = $this->resolveActivePaymentConfiguration($workspace, self::ACTIVE_PROVIDER);
+        $provider = $this->resolveProviderFromConfig($paymentConfig);
 
         return $provider->createCheckoutSession($booking, $paymentConfig);
     }
 
-    public function handleSuccessfulPayment(string $sessionId, string $provider = self::ACTIVE_PROVIDER): void
+    public function handleSuccessfulPayment(string $paymentReference, string $provider = self::ACTIVE_PROVIDER): void
     {
-        $providerInstance = $this->getProviderByName($provider);
-        $providerInstance->handleSuccessfulPayment($sessionId);
+        $providerInstance = $this->resolveProviderByName($provider);
+
+        $providerInstance->handleSuccessfulPayment($paymentReference);
     }
 
     public function createConnectAccount(Workspace $workspace, ?string $provider = null, array $bankDetails = []): array
     {
-        // Auto-select best provider if not specified
-        if (! $provider) {
-            $provider = self::ACTIVE_PROVIDER;
-        }
-
-        $this->ensureProviderAllowed($provider);
-
-        // Validate provider supports workspace currency
-        if (! $workspace->supportsProvider($provider)) {
-            throw new \Exception("Provider '{$provider}' does not support currency '{$workspace->currency}'");
-        }
-
-        $providerInstance = $this->getProviderByName($provider);
+        $providerInstance = $this->resolveProviderForWorkspace($workspace, $provider);
 
         return $providerInstance->createConnectAccount($workspace, $bankDetails);
     }
 
     public function updateConnectAccount(Workspace $workspace, ?string $provider = null, array $bankDetails = []): array
     {
-        if (! $provider) {
-            $provider = self::ACTIVE_PROVIDER;
-        }
+        $providerInstance = $this->resolveProviderForWorkspace($workspace, $provider);
 
-        $this->ensureProviderAllowed($provider);
-
-        if (! $workspace->supportsProvider($provider)) {
-            throw new \Exception("Provider '{$provider}' does not support currency '{$workspace->currency}'");
-        }
-
-        $providerInstance = $this->getProviderByName($provider);
-
-        if (! method_exists($providerInstance, 'updateConnectAccount')) {
-            throw new \Exception("Provider '{$provider}' does not support account updates");
-        }
-
-        /** @var mixed $providerInstance */
         return $providerInstance->updateConnectAccount($workspace, $bankDetails);
     }
 
@@ -88,7 +61,7 @@ class PaymentService
             return null;
         }
 
-        $provider = $this->getProvider($config);
+        $provider = $this->resolveProviderFromConfig($config);
 
         return $provider->getOnboardingUrl($config);
     }
@@ -99,25 +72,9 @@ class PaymentService
             return false;
         }
 
-        $provider = $this->getProvider($config);
+        $provider = $this->resolveProviderFromConfig($config);
 
         return $provider->isAccountVerified($config);
-    }
-
-    protected function getProvider(PaymentConfiguration $config): PaymentProviderInterface
-    {
-        return $this->getProviderByName($config->provider);
-    }
-
-    protected function getProviderByName(string $provider): PaymentProviderInterface
-    {
-        if (! isset($this->providers[$provider])) {
-            throw new \Exception("Payment provider '{$provider}' not supported");
-        }
-
-        $providerClass = $this->providers[$provider];
-
-        return app($providerClass);
     }
 
     public function getAvailableProviders(): array
@@ -127,18 +84,14 @@ class PaymentService
 
     public function getSupportedCountries(string $provider = self::ACTIVE_PROVIDER): array
     {
-        $this->ensureProviderAllowed($provider);
-
-        $providerInstance = $this->getProviderByName($provider);
+        $providerInstance = $this->resolveProviderByName($provider);
 
         return $providerInstance->getSupportedCountries();
     }
 
     public function getSupportedCurrencies(string $provider = self::ACTIVE_PROVIDER, ?string $countryCode = null): array
     {
-        $this->ensureProviderAllowed($provider);
-
-        $providerInstance = $this->getProviderByName($provider);
+        $providerInstance = $this->resolveProviderByName($provider);
 
         return $providerInstance->getSupportedCurrencies($countryCode);
     }
@@ -146,75 +99,61 @@ class PaymentService
     public function releaseFunds(Booking $booking): bool
     {
         $workspace = $booking->product->workspace;
-        $booking_payment = $booking->latestPayment;
-        if (! $booking_payment) {
-            throw new \Exception('No payment record found for booking: '.$booking->id);
-        }
-        $paymentConfig = $workspace->activePaymentConfiguration($booking_payment->provider);
+        $bookingPayment = $this->resolveLatestBookingPayment($booking);
+        $paymentConfig = $this->resolveActivePaymentConfiguration($workspace, $bookingPayment->provider);
+        $provider = $this->resolveProviderFromConfig($paymentConfig);
 
-        if (! $paymentConfig) {
-            throw new \Exception('No active payment configuration found for workspace: '.$workspace->name);
-        }
-
-        $provider = $this->getProvider($paymentConfig);
-
-        if (method_exists($provider, 'releaseFunds')) {
-            /** @var mixed $provider */
-            return $provider->releaseFunds($booking);
-        }
-
-        throw new \Exception("Provider '{$paymentConfig->provider}' does not support fund release");
+        return $provider->releaseFunds($booking);
     }
 
     public function refundPayment(Booking $booking, string $reason = 'Work rejected'): bool
     {
         $workspace = $booking->product->workspace;
-        $booking_payment = $booking->latestPayment;
-        if (! $booking_payment) {
-            throw new \Exception('No payment record found for booking: '.$booking->id);
-        }
-        $paymentConfig = $workspace->activePaymentConfiguration($booking_payment->provider);
+        $bookingPayment = $this->resolveLatestBookingPayment($booking);
+        $paymentConfig = $this->resolveActivePaymentConfiguration($workspace, $bookingPayment->provider);
+        $provider = $this->resolveProviderFromConfig($paymentConfig);
 
-        if (! $paymentConfig) {
-            throw new \Exception('No active payment configuration found for workspace: '.$workspace->name);
-        }
-
-        $provider = $this->getProvider($paymentConfig);
-
-        if (method_exists($provider, 'refundPayment')) {
-            /** @var mixed $provider */
-            return $provider->refundPayment($booking, $reason);
-        }
-
-        throw new \Exception("Provider '{$paymentConfig->provider}' does not support refunds");
+        return $provider->refundPayment($booking, $reason);
     }
 
     public function getSupportedBanks(string $provider = 'paystack', string $countryCode = 'NG', ?string $currency = null, ?string $type = null): array
     {
-        $this->ensureProviderAllowed($provider);
+        $providerInstance = $this->resolveProviderByName($provider);
 
-        $providerInstance = $this->getProviderByName($provider);
-
-        if (method_exists($providerInstance, 'getSupportedBanks')) {
-            /** @var mixed $providerInstance */
-            return $providerInstance->getSupportedBanks($countryCode, $currency, $type);
-        }
-
-        return [];
+        return $providerInstance->getSupportedBanks($countryCode, $currency, $type);
     }
 
     public function verifyBankAccount(string $accountNumber, string $bankCode, string $provider = 'paystack'): array
     {
+        $providerInstance = $this->resolveProviderByName($provider);
+
+        return $providerInstance->verifyBankAccount($accountNumber, $bankCode);
+    }
+
+    private function resolveProviderFromConfig(PaymentConfiguration $config): PaymentProviderInterface
+    {
+        return $this->resolveProviderByName($config->provider);
+    }
+
+    private function resolveProviderForWorkspace(Workspace $workspace, ?string $provider): PaymentProviderInterface
+    {
+        $providerName = $provider ?: self::ACTIVE_PROVIDER;
+        $this->assertWorkspaceSupportsProvider($workspace, $providerName);
+
+        return $this->resolveProviderByName($providerName);
+    }
+
+    private function resolveProviderByName(string $provider): PaymentProviderInterface
+    {
         $this->ensureProviderAllowed($provider);
 
-        $providerInstance = $this->getProviderByName($provider);
-
-        if (method_exists($providerInstance, 'verifyBankAccount')) {
-            /** @var mixed $providerInstance */
-            return $providerInstance->verifyBankAccount($accountNumber, $bankCode);
+        if (! isset($this->providers[$provider])) {
+            throw new \Exception("Payment provider '{$provider}' not supported");
         }
 
-        throw new \Exception("Provider '{$provider}' does not support bank verification");
+        $providerClass = $this->providers[$provider];
+
+        return app($providerClass);
     }
 
     private function ensureProviderAllowed(string $provider): void
@@ -222,5 +161,34 @@ class PaymentService
         if ($provider !== self::ACTIVE_PROVIDER) {
             throw new \Exception("Provider '{$provider}' is currently disabled. Active provider: ".self::ACTIVE_PROVIDER);
         }
+    }
+
+    private function assertWorkspaceSupportsProvider(Workspace $workspace, string $provider): void
+    {
+        if (! $workspace->supportsProvider($provider)) {
+            throw new \Exception("Provider '{$provider}' does not support currency '{$workspace->currency}'");
+        }
+    }
+
+    private function resolveActivePaymentConfiguration(Workspace $workspace, string $provider): PaymentConfiguration
+    {
+        $paymentConfig = $workspace->activePaymentConfiguration($provider);
+
+        if (! $paymentConfig) {
+            throw new \Exception("No active payment configuration found for workspace: {$workspace->name} with provider: {$provider}");
+        }
+
+        return $paymentConfig;
+    }
+
+    private function resolveLatestBookingPayment(Booking $booking): BookingPayment
+    {
+        $bookingPayment = $booking->latestPayment;
+
+        if (! $bookingPayment) {
+            throw new \Exception('No payment record found for booking: '.$booking->id);
+        }
+
+        return $bookingPayment;
     }
 }

@@ -56,31 +56,26 @@ class StripePaymentProvider implements PaymentProviderInterface
             ->all();
     }
 
-    /**
-     * Create a checkout session for a booking
-     */
     public function createCheckoutSession(Booking $booking, PaymentConfiguration $config): array
     {
         try {
             $workspace = $booking->product->workspace;
-            $currency = strtolower($workspace->currency); // Stripe expects lowercase
+            $currency = strtolower($workspace->currency);
             $platformFeeAmount = $booking->amount_paid * ($config->platform_fee_percentage / 100);
 
             $session = Session::create([
                 'payment_method_types' => ['card'],
-                'line_items' => [
-                    [
-                        'price_data' => [
-                            'currency' => $currency,
-                            'product_data' => [
-                                'name' => $booking->product->name,
-                                'description' => "Sponsorship slot on {$booking->slot->slot_date} at {$booking->slot->slot_time}",
-                            ],
-                            'unit_amount' => $this->convertToSmallestUnit($booking->amount_paid, $currency),
+                'line_items' => [[
+                    'price_data' => [
+                        'currency' => $currency,
+                        'product_data' => [
+                            'name' => $booking->product->name,
+                            'description' => 'Sponsorship booking #'.$booking->id,
                         ],
-                        'quantity' => 1,
+                        'unit_amount' => $this->convertToSmallestUnit($booking->amount_paid, $currency),
                     ],
-                ],
+                    'quantity' => 1,
+                ]],
                 'mode' => 'payment',
                 'success_url' => route('payment.success', ['session_id' => '{CHECKOUT_SESSION_ID}']),
                 'cancel_url' => route('payment.cancel'),
@@ -98,11 +93,10 @@ class StripePaymentProvider implements PaymentProviderInterface
                 ],
             ]);
 
-            // Create payment record
             $payment = BookingPayment::createForBooking($booking, 'stripe', [
                 'provider_reference' => $session->id,
                 'session_id' => $session->id,
-                'currency' => $currency,
+                'currency' => strtoupper($currency),
                 'metadata' => [
                     'workspace_id' => $config->workspace_id,
                     'country' => $workspace->country_code,
@@ -110,7 +104,7 @@ class StripePaymentProvider implements PaymentProviderInterface
                 'provider_data' => [
                     'session_data' => $session->toArray(),
                     'platform_fee_amount' => $platformFeeAmount,
-                    'currency' => $currency,
+                    'currency' => strtoupper($currency),
                 ],
             ]);
 
@@ -129,47 +123,47 @@ class StripePaymentProvider implements PaymentProviderInterface
         }
     }
 
-    /**
-     * Handle successful payment after checkout
-     */
-    public function handleSuccessfulPayment(string $sessionId): void
+    public function handleSuccessfulPayment(string $paymentReference): void
     {
         try {
-            $session = Session::retrieve($sessionId);
+            $session = Session::retrieve($paymentReference);
 
-            if ($session->payment_status === 'paid') {
-                $payment = BookingPayment::findBySessionId('stripe', $sessionId);
-
-                if ($payment) {
-                    $payment->update([
-                        'provider_transaction_id' => $session->payment_intent,
-                        'status' => 'completed',
-                        'paid_at' => now(),
-                        'provider_data' => array_merge(
-                            $payment->provider_data ?? [],
-                            ['payment_intent' => $session->payment_intent]
-                        ),
-                    ]);
-
-                    // Update booking status
-                    $payment->booking->update([
-                        'status' => BookingStatus::CONFIRMED,
-                    ]);
-
-                    Log::info('Payment confirmed for booking', [
-                        'booking_id' => $payment->booking_id,
-                        'session_id' => $sessionId,
-                        'payment_id' => $payment->id,
-                    ]);
-                } else {
-                    Log::error('Payment record not found for Stripe session', [
-                        'session_id' => $sessionId,
-                    ]);
-                }
+            if ($session->payment_status !== 'paid') {
+                return;
             }
+
+            $payment = BookingPayment::findBySessionId('stripe', $paymentReference);
+
+            if (! $payment) {
+                Log::error('Payment record not found for Stripe session', [
+                    'session_id' => $paymentReference,
+                ]);
+
+                return;
+            }
+
+            $payment->update([
+                'provider_transaction_id' => $session->payment_intent,
+                'status' => 'completed',
+                'paid_at' => now(),
+                'provider_data' => array_merge(
+                    $payment->provider_data ?? [],
+                    ['payment_intent' => $session->payment_intent]
+                ),
+            ]);
+
+            $payment->booking->update([
+                'status' => BookingStatus::CONFIRMED,
+            ]);
+
+            Log::info('Stripe payment confirmed for booking', [
+                'booking_id' => $payment->booking_id,
+                'session_id' => $paymentReference,
+                'payment_id' => $payment->id,
+            ]);
         } catch (ApiErrorException $e) {
-            Log::error('Failed to handle successful payment', [
-                'session_id' => $sessionId,
+            Log::error('Failed to handle successful Stripe payment', [
+                'session_id' => $paymentReference,
                 'error' => $e->getMessage(),
             ]);
 
@@ -177,26 +171,21 @@ class StripePaymentProvider implements PaymentProviderInterface
         }
     }
 
-    /**
-     * Create a Connect account for accepting payments
-     */
     public function createConnectAccount(Workspace $workspace, array $bankDetails = []): array
     {
         try {
-            // Map workspace country to Stripe-supported countries
             $stripeCountry = $this->mapToStripeCountry($workspace->country_code);
 
             $account = Account::create([
                 'type' => 'standard',
                 'country' => $stripeCountry,
-                'business_type' => 'individual', // This should be configurable based on workspace type
+                'business_type' => 'individual',
             ]);
 
-            // Create or update payment configuration
             PaymentConfiguration::updateOrCreate(
                 [
                     'workspace_id' => $workspace->id,
-                    'user_id' => $workspace->owner()->id,
+                    'user_id' => $workspace->owner_id,
                     'provider' => 'stripe',
                 ],
                 [
@@ -210,12 +199,6 @@ class StripePaymentProvider implements PaymentProviderInterface
                     ],
                 ]
             );
-
-            Log::info('Stripe Connect account created', [
-                'workspace_id' => $workspace->id,
-                'account_id' => $account->id,
-                'country' => $stripeCountry,
-            ]);
 
             return [
                 'account_id' => $account->id,
@@ -231,9 +214,11 @@ class StripePaymentProvider implements PaymentProviderInterface
         }
     }
 
-    /**
-     * Get onboarding URL for Connect account setup
-     */
+    public function updateConnectAccount(Workspace $workspace, array $bankDetails = []): array
+    {
+        throw new \Exception('Stripe provider does not support connect-account updates via this flow.');
+    }
+
     public function getOnboardingUrl(PaymentConfiguration $config): ?string
     {
         if (! $config->provider_account_id || $config->is_verified) {
@@ -243,9 +228,6 @@ class StripePaymentProvider implements PaymentProviderInterface
         return $this->createOnboardingUrl($config->provider_account_id);
     }
 
-    /**
-     * Check if Connect account is fully verified
-     */
     public function isAccountVerified(PaymentConfiguration $config): bool
     {
         if (! $config->provider_account_id) {
@@ -256,10 +238,9 @@ class StripePaymentProvider implements PaymentProviderInterface
             $account = Account::retrieve($config->provider_account_id);
 
             $isVerified = $account->charges_enabled &&
-                         $account->payouts_enabled &&
-                         ! $account->requirements->eventually_due;
+                $account->payouts_enabled &&
+                ! $account->requirements->eventually_due;
 
-            // Update the config if verification status has changed
             if ($isVerified && ! $config->is_verified) {
                 $config->markAsVerified();
             }
@@ -276,9 +257,26 @@ class StripePaymentProvider implements PaymentProviderInterface
         }
     }
 
-    /**
-     * Create onboarding URL for Connect account
-     */
+    public function releaseFunds(Booking $booking): bool
+    {
+        throw new \Exception('Stripe provider does not support manual fund release in this integration.');
+    }
+
+    public function refundPayment(Booking $booking, string $reason = 'Work rejected'): bool
+    {
+        throw new \Exception('Stripe provider does not support refunds in this integration.');
+    }
+
+    public function getSupportedBanks(string $countryCode = 'NG', ?string $currency = null, ?string $type = null): array
+    {
+        return [];
+    }
+
+    public function verifyBankAccount(string $accountNumber, string $bankCode): array
+    {
+        throw new \Exception('Stripe provider does not support bank verification in this integration.');
+    }
+
     protected function createOnboardingUrl(string $accountId): string
     {
         try {
@@ -300,38 +298,31 @@ class StripePaymentProvider implements PaymentProviderInterface
         }
     }
 
-    /**
-     * Convert amount to smallest currency unit (cents, pence, etc.)
-     */
     protected function convertToSmallestUnit(float $amount, string $currency): int
     {
         $zeroDecimalCurrencies = ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
 
-        if (in_array(strtoupper($currency), $zeroDecimalCurrencies)) {
-            return (int) $amount; // No conversion needed for zero-decimal currencies
+        if (in_array(strtoupper($currency), $zeroDecimalCurrencies, true)) {
+            return (int) $amount;
         }
 
-        return (int) ($amount * 100); // Convert to smallest unit (cents, pence, etc.)
+        return (int) ($amount * 100);
     }
 
-    /**
-     * Map workspace country code to Stripe-supported country
-     */
     protected function mapToStripeCountry(string $countryCode): string
     {
         $countryMapping = [
-            'NG' => 'US', // Nigeria creators can use US Stripe accounts
-            'GH' => 'US', // Ghana creators can use US Stripe accounts
-            'ZA' => 'US', // South Africa creators can use US Stripe accounts
-            'KE' => 'US', // Kenya creators can use US Stripe accounts
+            'NG' => 'US',
+            'GH' => 'US',
+            'ZA' => 'US',
+            'KE' => 'US',
             'US' => 'US',
             'CA' => 'CA',
             'GB' => 'GB',
             'DE' => 'DE',
             'FR' => 'FR',
-            // Add more mappings as needed
         ];
 
-        return $countryMapping[$countryCode] ?? 'US'; // Default to US
+        return $countryMapping[$countryCode] ?? 'US';
     }
 }
