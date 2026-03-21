@@ -2,6 +2,7 @@
 
 use App\Models\BookingInviteToken;
 use App\Services\BookingService;
+use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -27,7 +28,14 @@ new #[Layout('layouts::guest'), Title('Complete Your Booking')] class extends Co
 
         if (! $this->inviteToken || ! $this->inviteToken->isValid()) {
             $this->tokenInvalid = true;
+
+            return;
         }
+
+        $booking = $this->inviteToken->booking;
+        $this->guestName = (string) ($booking->guest_name ?? '');
+        $this->guestEmail = (string) ($booking->guest_email ?? '');
+        $this->guestCompany = (string) ($booking->guest_company ?? '');
     }
 
     public function proceedToPayment(): void
@@ -42,8 +50,9 @@ new #[Layout('layouts::guest'), Title('Complete Your Booking')] class extends Co
         $product = $booking->product;
 
         $isAuthenticated = Auth::check();
+        $isAlreadyAssociatedBrand = (bool) ($booking->brand_user_id && $booking->brand_workspace_id);
 
-        if (! $isAuthenticated) {
+        if (! $isAuthenticated && ! $isAlreadyAssociatedBrand) {
             $this->validate([
                 'guestName' => 'required|string|max:255',
                 'guestEmail' => 'required|email|max:255',
@@ -65,17 +74,21 @@ new #[Layout('layouts::guest'), Title('Complete Your Booking')] class extends Co
         try {
             if ($isAuthenticated) {
                 $workspace = currentWorkspace();
-                $brandData = [
-                    'brand_user_id' => Auth::id(),
-                    'brand_workspace_id' => $workspace?->id,
-                ];
+                $brandData = $isAlreadyAssociatedBrand
+                    ? null
+                    : [
+                        'brand_user_id' => Auth::id(),
+                        'brand_workspace_id' => $workspace?->id,
+                    ];
             } else {
-                $brandData = [
-                    'brand_user_id' => null,
-                    'guest_name' => $this->guestName,
-                    'guest_email' => $this->guestEmail,
-                    'guest_company' => $this->guestCompany ?: null,
-                ];
+                $brandData = $isAlreadyAssociatedBrand
+                    ? null
+                    : [
+                        'brand_user_id' => null,
+                        'guest_name' => $this->guestName,
+                        'guest_email' => $this->guestEmail,
+                        'guest_company' => $this->guestCompany ?: null,
+                    ];
             }
 
             $result = app(BookingService::class)->fulfillInviteBooking(
@@ -153,25 +166,27 @@ new #[Layout('layouts::guest'), Title('Complete Your Booking')] class extends Co
                 <x-bookings.checkout-form :requirements="$product->requirements" action="proceedToPayment" :error="$errorMessage">
                     <x-slot:guest-fields>
                         @guest
-                            <div class="space-y-5 rounded-lg border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900">
-                                <flux:heading size="sm" class="mb-1">Your Details</flux:heading>
-                                <div class="grid gap-4 sm:grid-cols-2">
+                            @if(! $booking->brand_user_id)
+                                <div class="space-y-5 rounded-lg border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900">
+                                    <flux:heading size="sm" class="mb-1">Your Details</flux:heading>
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <flux:field>
+                                            <flux:label>Full name *</flux:label>
+                                            <flux:input wire:model="guestName" placeholder="Jane Smith" />
+                                            <flux:error name="guestName" />
+                                        </flux:field>
+                                        <flux:field>
+                                            <flux:label>Email *</flux:label>
+                                            <flux:input wire:model="guestEmail" type="email" placeholder="jane@brand.com" />
+                                            <flux:error name="guestEmail" />
+                                        </flux:field>
+                                    </div>
                                     <flux:field>
-                                        <flux:label>Full name *</flux:label>
-                                        <flux:input wire:model="guestName" placeholder="Jane Smith" />
-                                        <flux:error name="guestName" />
-                                    </flux:field>
-                                    <flux:field>
-                                        <flux:label>Email *</flux:label>
-                                        <flux:input wire:model="guestEmail" type="email" placeholder="jane@brand.com" />
-                                        <flux:error name="guestEmail" />
+                                        <flux:label>Company (optional)</flux:label>
+                                        <flux:input wire:model="guestCompany" placeholder="Acme Corp" />
                                     </flux:field>
                                 </div>
-                                <flux:field>
-                                    <flux:label>Company (optional)</flux:label>
-                                    <flux:input wire:model="guestCompany" placeholder="Acme Corp" />
-                                </flux:field>
-                            </div>
+                            @endif
                         @endguest
                     </x-slot:guest-fields>
                 </x-bookings.checkout-form>
