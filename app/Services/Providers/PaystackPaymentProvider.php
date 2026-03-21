@@ -31,6 +31,59 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         }
     }
 
+    public function getSupportedCountries(): array
+    {
+        try {
+            $response = Http::withToken($this->secretKey)
+                ->get($this->baseUrl.'/country');
+
+            if (! $response->successful()) {
+                throw new \Exception('Failed to fetch countries: '.$response->body());
+            }
+
+            $payload = $response->json();
+
+            if (! ($payload['status'] ?? false)) {
+                throw new \Exception('Failed to fetch countries: '.($payload['message'] ?? 'Unknown error'));
+            }
+
+            return collect($payload['data'] ?? [])
+                ->filter(fn (array $country): bool => ! empty($country['iso_code']) && ! empty($country['name']))
+                ->values()
+                ->all();
+        } catch (\Throwable $e) {
+            Log::error('Failed to fetch supported countries from Paystack', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
+    public function getSupportedCurrencies(?string $countryCode = null): array
+    {
+        $countries = $this->getSupportedCountries();
+
+        if ($countryCode) {
+            $country = collect($countries)->firstWhere('iso_code', strtoupper($countryCode));
+
+            return collect(data_get($country, 'relationships.currency.data', []))
+                ->filter(fn (mixed $currency): bool => is_string($currency) && $currency !== '')
+                ->map(fn (string $currency): string => strtoupper($currency))
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        return collect($countries)
+            ->flatMap(fn (array $country): array => data_get($country, 'relationships.currency.data', []))
+            ->filter(fn (mixed $currency): bool => is_string($currency) && $currency !== '')
+            ->map(fn (string $currency): string => strtoupper($currency))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     public function createCheckoutSession(Booking $booking, PaymentConfiguration $config): array
     {
         try {
@@ -50,7 +103,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'reference' => $reference,
                 'callback_url' => route('payment.paystack.callback'),
                 'subaccount' => $config->provider_account_id,
-                'bearer' => 'subaccount',
+                'bearer' => 'account',
                 'transaction_charge' => $this->convertToSmallestUnit(
                     $platformFeeAmount,
                     $currency
@@ -718,7 +771,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         };
     }
 
-    public function getSupportedBanks(string $countryCode = 'NG'): array
+    public function getSupportedBanks(string $countryCode = 'NG', ?string $currency = null, ?string $type = null): array
     {
         try {
             $countryMapping = [
@@ -730,10 +783,20 @@ class PaystackPaymentProvider implements PaymentProviderInterface
 
             $country = $countryMapping[$countryCode] ?? 'nigeria';
 
+            $query = [
+                'country' => $country,
+            ];
+
+            if ($currency) {
+                $query['currency'] = strtoupper($currency);
+            }
+
+            if ($type) {
+                $query['type'] = $type;
+            }
+
             $response = Http::withToken($this->secretKey)
-                ->get($this->baseUrl.'/bank', [
-                    'country' => $country,
-                ]);
+                ->get($this->baseUrl.'/bank', $query);
 
             if (! $response->successful()) {
                 throw new \Exception('Failed to fetch banks: '.$response->body());
@@ -745,10 +808,14 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 throw new \Exception('Failed to fetch banks: '.$data['message']);
             }
 
-            return $data['data'];
+            return collect($data['data'])
+                ->filter(fn (array $bank): bool => (bool) ($bank['active'] ?? true))
+                ->values()
+                ->all();
         } catch (\Exception $e) {
             Log::error('Failed to fetch supported banks', [
                 'country_code' => $countryCode,
+                'currency' => $currency,
                 'error' => $e->getMessage(),
             ]);
 
@@ -768,13 +835,15 @@ class PaystackPaymentProvider implements PaymentProviderInterface
 
     protected function getAvailableChannels(string $countryCode): array
     {
-        $channels = [
-            'NG' => ['card', 'bank', 'ussd', 'mobile_money', 'bank_transfer'],
-            'GH' => ['card', 'bank', 'mobile_money'],
-            'ZA' => ['card', 'bank'],
-            'KE' => ['card', 'bank', 'mobile_money'],
-        ];
 
-        return $channels[$countryCode] ?? ['card', 'bank'];
+        return ["card", "bank", "apple_pay", "ussd", "qr", "mobile_money", "bank_transfer", "eft", "capitec_pay", "payattitude"];
+        // $channels = [
+        //     'NG' => ['card', 'bank', 'ussd', 'mobile_money', 'bank_transfer'],
+        //     'GH' => ['card', 'bank', 'mobile_money'],
+        //     'ZA' => ['card', 'bank'],
+        //     'KE' => ['card', 'bank', 'mobile_money'],
+        //// ];
+
+        // return $channels[$countryCode] ?? ['card', 'bank'];
     }
 }

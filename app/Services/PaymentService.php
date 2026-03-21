@@ -103,6 +103,24 @@ class PaymentService
         return [self::ACTIVE_PROVIDER];
     }
 
+    public function getSupportedCountries(string $provider = self::ACTIVE_PROVIDER): array
+    {
+        $this->ensureProviderAllowed($provider);
+
+        $providerInstance = $this->getProviderByName($provider);
+
+        return $providerInstance->getSupportedCountries();
+    }
+
+    public function getSupportedCurrencies(string $provider = self::ACTIVE_PROVIDER, ?string $countryCode = null): array
+    {
+        $this->ensureProviderAllowed($provider);
+
+        $providerInstance = $this->getProviderByName($provider);
+
+        return $providerInstance->getSupportedCurrencies($countryCode);
+    }
+
     public function releaseFunds(Booking $booking): bool
     {
         $workspace = $booking->product->workspace;
@@ -119,6 +137,7 @@ class PaymentService
         $provider = $this->getProvider($paymentConfig);
 
         if (method_exists($provider, 'releaseFunds')) {
+            /** @var mixed $provider */
             return $provider->releaseFunds($booking);
         }
 
@@ -141,20 +160,22 @@ class PaymentService
         $provider = $this->getProvider($paymentConfig);
 
         if (method_exists($provider, 'refundPayment')) {
+            /** @var mixed $provider */
             return $provider->refundPayment($booking, $reason);
         }
 
         throw new \Exception("Provider '{$paymentConfig->provider}' does not support refunds");
     }
 
-    public function getSupportedBanks(string $provider = 'paystack', string $countryCode = 'NG'): array
+    public function getSupportedBanks(string $provider = 'paystack', string $countryCode = 'NG', ?string $currency = null, ?string $type = null): array
     {
         $this->ensureProviderAllowed($provider);
 
         $providerInstance = $this->getProviderByName($provider);
 
         if (method_exists($providerInstance, 'getSupportedBanks')) {
-            return $providerInstance->getSupportedBanks($countryCode);
+            /** @var mixed $providerInstance */
+            return $providerInstance->getSupportedBanks($countryCode, $currency, $type);
         }
 
         return [];
@@ -167,6 +188,7 @@ class PaymentService
         $providerInstance = $this->getProviderByName($provider);
 
         if (method_exists($providerInstance, 'verifyBankAccount')) {
+            /** @var mixed $providerInstance */
             return $providerInstance->verifyBankAccount($accountNumber, $bankCode);
         }
 

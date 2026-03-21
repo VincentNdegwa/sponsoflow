@@ -9,7 +9,6 @@ use App\Models\PaymentConfiguration;
 use App\Models\Workspace;
 use App\Services\PaymentProviderInterface;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Stripe\Account;
 use Stripe\AccountLink;
 use Stripe\Checkout\Session;
@@ -18,9 +17,43 @@ use Stripe\Stripe;
 
 class StripePaymentProvider implements PaymentProviderInterface
 {
+    protected const array SUPPORTED_COUNTRIES = [
+        'US' => ['name' => 'United States', 'default_currency_code' => 'USD', 'currencies' => ['USD']],
+        'CA' => ['name' => 'Canada', 'default_currency_code' => 'CAD', 'currencies' => ['CAD', 'USD']],
+        'GB' => ['name' => 'United Kingdom', 'default_currency_code' => 'GBP', 'currencies' => ['GBP']],
+        'DE' => ['name' => 'Germany', 'default_currency_code' => 'EUR', 'currencies' => ['EUR']],
+        'FR' => ['name' => 'France', 'default_currency_code' => 'EUR', 'currencies' => ['EUR']],
+    ];
+
     public function __construct()
     {
         Stripe::setApiKey(config('cashier.secret'));
+    }
+
+    public function getSupportedCountries(): array
+    {
+        return collect(self::SUPPORTED_COUNTRIES)
+            ->map(fn (array $data, string $code): array => [
+                'iso_code' => $code,
+                'name' => $data['name'],
+                'default_currency_code' => $data['default_currency_code'],
+                'currencies' => $data['currencies'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function getSupportedCurrencies(?string $countryCode = null): array
+    {
+        if ($countryCode && isset(self::SUPPORTED_COUNTRIES[$countryCode])) {
+            return self::SUPPORTED_COUNTRIES[$countryCode]['currencies'];
+        }
+
+        return collect(self::SUPPORTED_COUNTRIES)
+            ->flatMap(fn (array $data): array => $data['currencies'])
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**
@@ -152,7 +185,7 @@ class StripePaymentProvider implements PaymentProviderInterface
         try {
             // Map workspace country to Stripe-supported countries
             $stripeCountry = $this->mapToStripeCountry($workspace->country_code);
-            
+
             $account = Account::create([
                 'type' => 'standard',
                 'country' => $stripeCountry,
@@ -273,11 +306,11 @@ class StripePaymentProvider implements PaymentProviderInterface
     protected function convertToSmallestUnit(float $amount, string $currency): int
     {
         $zeroDecimalCurrencies = ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
-        
+
         if (in_array(strtoupper($currency), $zeroDecimalCurrencies)) {
             return (int) $amount; // No conversion needed for zero-decimal currencies
         }
-        
+
         return (int) ($amount * 100); // Convert to smallest unit (cents, pence, etc.)
     }
 
@@ -298,7 +331,7 @@ class StripePaymentProvider implements PaymentProviderInterface
             'FR' => 'FR',
             // Add more mappings as needed
         ];
-        
+
         return $countryMapping[$countryCode] ?? 'US'; // Default to US
     }
 }

@@ -9,6 +9,20 @@ use App\Models\Workspace;
 interface PaymentProviderInterface
 {
     /**
+     * Get provider-supported countries for onboarding.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getSupportedCountries(): array;
+
+    /**
+     * Get provider-supported currencies, optionally scoped to a country.
+     *
+     * @return array<int, string>
+     */
+    public function getSupportedCurrencies(?string $countryCode = null): array;
+
+    /**
      * Create a checkout session for a booking
      */
     public function createCheckoutSession(Booking $booking, PaymentConfiguration $config): array;

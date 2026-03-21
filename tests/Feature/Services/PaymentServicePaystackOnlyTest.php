@@ -28,6 +28,20 @@ test('it rejects fetching banks with non paystack provider', function () {
         ->toThrow("Provider 'stripe' is currently disabled. Active provider: paystack");
 });
 
+test('it rejects fetching supported countries with non paystack provider', function () {
+    $service = app(PaymentService::class);
+
+    expect(fn () => $service->getSupportedCountries('stripe'))
+        ->toThrow("Provider 'stripe' is currently disabled. Active provider: paystack");
+});
+
+test('it rejects fetching supported currencies with non paystack provider', function () {
+    $service = app(PaymentService::class);
+
+    expect(fn () => $service->getSupportedCurrencies('stripe', 'US'))
+        ->toThrow("Provider 'stripe' is currently disabled. Active provider: paystack");
+});
+
 test('it rejects bank verification with non paystack provider', function () {
     $service = app(PaymentService::class);
 

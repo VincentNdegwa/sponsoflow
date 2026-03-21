@@ -186,3 +186,31 @@ test('it uses and persists platform fee percentage when creating paystack connec
 
     expect((float) $config->platform_fee_percentage)->toBe(10.0);
 });
+
+test('it initializes checkout with account as fee bearer and platform charge split', function () {
+    config()->set('services.paystack.secret_key', 'sk_test_key');
+
+    [$booking, $config] = createPaystackBookingContext();
+
+    Http::fake([
+        'https://api.paystack.co/transaction/initialize' => Http::response([
+            'status' => true,
+            'data' => [
+                'access_code' => 'access_code_123',
+                'authorization_url' => 'https://checkout.paystack.com/access_code_123',
+            ],
+        ], 200),
+    ]);
+
+    app(PaystackPaymentProvider::class)->createCheckoutSession($booking, $config);
+
+    Http::assertSent(function ($request) {
+        if ($request->url() !== 'https://api.paystack.co/transaction/initialize') {
+            return false;
+        }
+
+        return data_get($request->data(), 'bearer') === 'account'
+            && data_get($request->data(), 'transaction_charge') === 4033
+            && data_get($request->data(), 'subaccount') === 'ACCT_test_123';
+    });
+});
