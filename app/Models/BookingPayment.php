@@ -21,17 +21,13 @@ class BookingPayment extends Model
         'session_id',
         'status',
         'amount',
-        'processor_fee_amount',
-        'platform_fee_amount',
-        'escrow_amount',
-        'creator_payout_amount',
-        'creator_released_amount',
         'creator_released_at',
         'amount_usd',
         'currency',
         'exchange_rate_to_usd',
         'exchange_rate_provider',
         'exchange_rate_fetched_at',
+        'amount_breakdown',
         'provider_data',
         'metadata',
         'paid_at',
@@ -45,15 +41,11 @@ class BookingPayment extends Model
     {
         return [
             'amount' => 'decimal:2',
-            'processor_fee_amount' => 'decimal:2',
-            'platform_fee_amount' => 'decimal:2',
-            'escrow_amount' => 'decimal:2',
-            'creator_payout_amount' => 'decimal:2',
-            'creator_released_amount' => 'decimal:2',
             'creator_released_at' => 'datetime',
             'amount_usd' => 'decimal:2',
             'exchange_rate_to_usd' => 'decimal:10',
             'exchange_rate_fetched_at' => 'datetime',
+            'amount_breakdown' => 'array',
             'provider_data' => 'array',
             'metadata' => 'array',
             'paid_at' => 'datetime',
@@ -186,6 +178,16 @@ class BookingPayment extends Model
             'amount' => $amount,
             'currency' => $currency,
             'status' => 'pending',
+            'amount_breakdown' => [
+                'local' => [
+                    'currency' => $currency,
+                    'gross_amount' => $amount,
+                ],
+                'usd' => [
+                    'currency' => 'USD',
+                    'gross_amount' => $conversionData['amount_usd'],
+                ],
+            ],
         ], $conversionData, $data));
     }
 

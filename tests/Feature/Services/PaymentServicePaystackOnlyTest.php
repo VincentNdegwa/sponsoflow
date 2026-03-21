@@ -21,6 +21,18 @@ test('it rejects creating connect account with non paystack provider', function 
         ->toThrow("Provider 'stripe' is currently disabled. Active provider: paystack");
 });
 
+test('it rejects updating connect account with non paystack provider', function () {
+    $workspace = Workspace::factory()->create([
+        'country_code' => 'US',
+        'currency' => 'USD',
+    ]);
+
+    $service = app(PaymentService::class);
+
+    expect(fn () => $service->updateConnectAccount($workspace, 'stripe', []))
+        ->toThrow("Provider 'stripe' is currently disabled. Active provider: paystack");
+});
+
 test('it rejects fetching banks with non paystack provider', function () {
     $service = app(PaymentService::class);
 

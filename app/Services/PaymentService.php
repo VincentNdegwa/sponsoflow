@@ -60,6 +60,28 @@ class PaymentService
         return $providerInstance->createConnectAccount($workspace, $bankDetails);
     }
 
+    public function updateConnectAccount(Workspace $workspace, ?string $provider = null, array $bankDetails = []): array
+    {
+        if (! $provider) {
+            $provider = self::ACTIVE_PROVIDER;
+        }
+
+        $this->ensureProviderAllowed($provider);
+
+        if (! $workspace->supportsProvider($provider)) {
+            throw new \Exception("Provider '{$provider}' does not support currency '{$workspace->currency}'");
+        }
+
+        $providerInstance = $this->getProviderByName($provider);
+
+        if (! method_exists($providerInstance, 'updateConnectAccount')) {
+            throw new \Exception("Provider '{$provider}' does not support account updates");
+        }
+
+        /** @var mixed $providerInstance */
+        return $providerInstance->updateConnectAccount($workspace, $bankDetails);
+    }
+
     public function getOnboardingUrl(PaymentConfiguration $config): ?string
     {
         if (! $config->provider_account_id) {

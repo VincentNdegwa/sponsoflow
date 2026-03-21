@@ -46,41 +46,83 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
         $workspace = $this->workspace;
 
         if ($this->isCreator) {
-            $base = $workspace->bookings();
-            $payments = BookingPayment::query()
-                ->where('status', 'completed')
-                ->whereHas('booking', fn ($query) => $query->where('workspace_id', $workspace->id));
+            $financialPayments = BookingPayment::query()
+                ->select('booking_payments.*', 'bookings.status as booking_status')
+                ->join('bookings', 'bookings.id', '=', 'booking_payments.booking_id')
+                ->where('bookings.workspace_id', $workspace->id)
+                ->whereIn('booking_payments.status', ['completed', 'refunded'])
+                ->get();
 
-            $totalRevenueLocal = (float) (clone $payments)->sum('amount');
-            $totalRevenueUsd = (float) (clone $payments)->sum('amount_usd');
+            $pendingPayoutStatuses = [
+                BookingStatus::CONFIRMED->value,
+                BookingStatus::PROCESSING->value,
+                BookingStatus::REVISION_REQUESTED->value,
+            ];
+
+            $availableBalanceStatuses = [
+                BookingStatus::COMPLETED->value,
+            ];
+
+            $resolveMoney = function (BookingPayment $payment, string $localKey): float {
+                if ($this->isCreatorUsdView) {
+                    if ($localKey === 'gross_amount') {
+                        return (float) ($payment->amount_usd ?? 0);
+                    }
+
+                    return (float) data_get($payment->amount_breakdown, 'usd.'.$localKey, 0);
+                }
+
+                if ($localKey === 'gross_amount') {
+                    return (float) $payment->amount;
+                }
+
+                return (float) data_get($payment->amount_breakdown, 'local.'.$localKey, 0);
+            };
+
+            $completedPayments = $financialPayments->where('status', 'completed');
+
+            $totalEarnings = $completedPayments
+                ->sum(fn (BookingPayment $payment): float => $resolveMoney($payment, 'gross_amount'));
+
+            $totalFees = $completedPayments
+                ->sum(fn (BookingPayment $payment): float => $resolveMoney($payment, 'platform_fee_amount'));
+
+            $pendingPayout = $completedPayments
+                ->whereIn('booking_status', $pendingPayoutStatuses)
+                ->whereNull('creator_released_at')
+                ->sum(fn (BookingPayment $payment): float => $resolveMoney($payment, 'creator_payout_amount'));
+
+            $availableBalance = $completedPayments
+                ->whereIn('booking_status', $availableBalanceStatuses)
+                ->whereNull('creator_released_at')
+                ->sum(fn (BookingPayment $payment): float => $resolveMoney($payment, 'creator_payout_amount'));
 
             $displayCurrency = $this->isCreatorUsdView ? 'USD' : ($workspace->currency ?? 'USD');
-            $displayAmount = $this->isCreatorUsdView ? $totalRevenueUsd : $totalRevenueLocal;
 
             return [
                 [
-                    'label' => 'Total Revenue',
-                    'value' => formatMoney($displayAmount, $workspace, $displayCurrency),
+                    'label' => 'Total Earnings',
+                    'value' => formatMoney((float) $totalEarnings, $workspace, $displayCurrency),
                     'icon' => 'banknotes',
-                    'sub' => $this->isCreatorUsdView ? 'Lifetime earnings (USD)' : 'Lifetime earnings (local)',
+                    'sub' => 'Sum of successful booking gross amounts',
                 ],
                 [
-                    'label' => 'Active Bookings',
-                    'value' => (clone $base)->whereIn('status', [BookingStatus::CONFIRMED, BookingStatus::PROCESSING])->count(),
-                    'icon' => 'arrow-path',
-                    'sub' => 'Currently in progress',
+                    'label' => 'Total Fees',
+                    'value' => formatMoney((float) $totalFees, $workspace, $displayCurrency),
+                    'icon' => 'scale',
+                    'sub' => 'Total platform fees charged',
                 ],
                 [
-                    'label' => 'Open Inquiries',
-                    'value' => (clone $base)->whereIn('status', [BookingStatus::INQUIRY, BookingStatus::COUNTER_OFFERED, BookingStatus::PENDING_PAYMENT])->count(),
-                    'icon' => 'inbox',
-                    'sub' => 'Awaiting your action',
+                    'label' => 'Pending Payout',
+                    'value' => formatMoney((float) $pendingPayout, $workspace, $displayCurrency),
+                    'icon' => 'clock',
+                    'sub' => 'Escrow held for in-progress work',
                 ],
                 [
-                    'label' => 'Completed',
-                    'value' => (clone $base)->where('status', BookingStatus::COMPLETED)->count(),
-                    'icon' => 'check-circle',
-                    'sub' => 'All time',
+                    'label' => 'Available Balance',
+                    'value' => formatMoney((float) $availableBalance, $workspace, $displayCurrency),
+                    'icon' => 'wallet',
+                    'sub' => 'Approved and ready for release',
                 ],
             ];
         }

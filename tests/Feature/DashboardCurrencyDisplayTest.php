@@ -126,3 +126,113 @@ test('creator dashboard can toggle revenue between local and usd', function () {
         ->call('setCreatorRevenueCurrency', 'usd')
         ->assertSee('$8.00');
 });
+
+test('creator dashboard shows financial cards based on payout lifecycle', function () {
+    [$creatorUser, $creatorWorkspace] = createWorkspaceUserWithRole('creator', 'creator-owner');
+
+    $product = Product::factory()->create([
+        'workspace_id' => $creatorWorkspace->id,
+        'is_active' => true,
+        'is_public' => true,
+    ]);
+
+    $bookingOne = Booking::factory()->create([
+        'product_id' => $product->id,
+        'workspace_id' => $creatorWorkspace->id,
+        'creator_id' => $creatorUser->id,
+        'type' => BookingType::INSTANT,
+        'status' => BookingStatus::CONFIRMED,
+        'currency' => 'KES',
+    ]);
+
+    $bookingTwo = Booking::factory()->create([
+        'product_id' => $product->id,
+        'workspace_id' => $creatorWorkspace->id,
+        'creator_id' => $creatorUser->id,
+        'type' => BookingType::INSTANT,
+        'status' => BookingStatus::COMPLETED,
+        'currency' => 'KES',
+    ]);
+
+    $bookingThree = Booking::factory()->create([
+        'product_id' => $product->id,
+        'workspace_id' => $creatorWorkspace->id,
+        'creator_id' => $creatorUser->id,
+        'type' => BookingType::INSTANT,
+        'status' => BookingStatus::COMPLETED,
+        'currency' => 'KES',
+    ]);
+
+    BookingPayment::create([
+        'booking_id' => $bookingOne->id,
+        'provider' => 'paystack',
+        'provider_reference' => 'creator-financial-pay-1',
+        'status' => 'completed',
+        'amount' => 1000,
+        'amount_usd' => 8.00,
+        'currency' => 'KES',
+        'amount_breakdown' => [
+            'local' => [
+                'platform_fee_amount' => 100,
+                'creator_payout_amount' => 900,
+            ],
+            'usd' => [
+                'platform_fee_amount' => 0.80,
+                'creator_payout_amount' => 7.20,
+            ],
+        ],
+        'paid_at' => now(),
+    ]);
+
+    BookingPayment::create([
+        'booking_id' => $bookingTwo->id,
+        'provider' => 'paystack',
+        'provider_reference' => 'creator-financial-pay-2',
+        'status' => 'completed',
+        'amount' => 2000,
+        'amount_usd' => 16.00,
+        'currency' => 'KES',
+        'amount_breakdown' => [
+            'local' => [
+                'platform_fee_amount' => 200,
+                'creator_payout_amount' => 1800,
+            ],
+            'usd' => [
+                'platform_fee_amount' => 1.60,
+                'creator_payout_amount' => 14.40,
+            ],
+        ],
+        'paid_at' => now(),
+    ]);
+
+    BookingPayment::create([
+        'booking_id' => $bookingThree->id,
+        'provider' => 'paystack',
+        'provider_reference' => 'creator-financial-pay-3',
+        'status' => 'completed',
+        'amount' => 3000,
+        'amount_usd' => 24.00,
+        'currency' => 'KES',
+        'amount_breakdown' => [
+            'local' => [
+                'platform_fee_amount' => 300,
+                'creator_payout_amount' => 2700,
+            ],
+            'usd' => [
+                'platform_fee_amount' => 2.40,
+                'creator_payout_amount' => 21.60,
+            ],
+        ],
+        'creator_released_at' => now(),
+        'paid_at' => now(),
+    ]);
+
+    $this->actingAs($creatorUser);
+    session(['current_workspace_id' => $creatorWorkspace->id]);
+
+    Livewire::test('pages::dashboard')
+        ->assertSee('KSh6,000.00')
+        ->assertSee('KSh600.00')
+        ->assertSee('KSh900.00')
+        ->assertSee('KSh1,800.00');
+});

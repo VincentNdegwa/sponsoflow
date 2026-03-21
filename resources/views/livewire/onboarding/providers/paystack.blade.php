@@ -6,22 +6,24 @@
 
     <div class="space-y-4">
         <flux:select wire:model.change.live="country_code" label="Country" placeholder="Select your country" required>
-            @foreach($this->supportedCountries as $code => $country)
+            @foreach ($this->supportedCountries as $code => $country)
                 <flux:select.option value="{{ $code }}">{{ $country['name'] }}</flux:select.option>
             @endforeach
         </flux:select>
 
         <flux:select wire:model.change.live="currency" label="Currency" placeholder="Select currency" required>
-            @foreach($this->supportedCurrencies as $code => $currencyData)
+            @foreach ($this->supportedCurrencies as $code => $currencyData)
                 <flux:select.option value="{{ $code }}">
                     {{ $currencyData['symbol'] }} {{ $code }} - {{ $currencyData['name'] }}
                 </flux:select.option>
             @endforeach
         </flux:select>
 
-        <flux:select wire:model.change.live="payment_method" label="Payment Method" placeholder="Select payment method" required>
-            @foreach($this->supportedPaymentMethods as $method => $config)
-                <flux:select.option value="{{ $method }}">{{ ucfirst(str_replace('_', ' ', $method)) }}</flux:select.option>
+        <flux:select wire:model.change.live="payment_method" label="Payment Method" placeholder="Select payment method"
+            required>
+            @foreach ($this->supportedPaymentMethods as $method => $config)
+                <flux:select.option value="{{ $method }}">{{ ucfirst(str_replace('_', ' ', $method)) }}
+                </flux:select.option>
             @endforeach
         </flux:select>
 
@@ -40,7 +42,7 @@
         </div>
     </div>
 
-    @if($this->hasExistingPaymentAccount)
+    @if ($this->hasExistingPaymentAccount)
         <div class="rounded-md border border-primary-200 bg-primary-50 p-3">
             <div class="flex items-center gap-2">
                 <flux:icon.check-circle class="h-5 w-5 text-primary-600" />
@@ -52,37 +54,24 @@
         </div>
     @else
         <div class="space-y-4">
-            <flux:select wire:model="bank_code" label="Bank / Channel" placeholder="Choose bank or channel" required>
-                @foreach($supported_banks as $bank)
+            <flux:select wire:model="bank_code" label="Bank / Channel" placeholder="Choose bank or channel">
+                @foreach ($supported_banks as $bank)
                     <flux:select.option value="{{ $bank['code'] }}">{{ $bank['name'] }}</flux:select.option>
                 @endforeach
             </flux:select>
 
-            <flux:input
-                wire:model="account_number"
-                label="Account Number"
-                type="text"
-                placeholder="{{ $this->accountInputPlaceholder }}"
-            />
+            <flux:input wire:model="account_number" label="Account Number" type="text"
+                placeholder="{{ $this->accountInputPlaceholder }}" />
 
-            @if($this->requiresManualAccountName)
-                <flux:input
-                    wire:model="account_name"
-                    label="Account Name"
-                    type="text"
-                    placeholder="Enter account name"
-                />
+            @if ($this->requiresManualAccountName)
+                <flux:input wire:model="account_name" label="Account Name" type="text"
+                    placeholder="Enter account name" />
             @endif
 
             <div class="flex items-center gap-4">
-                @if($this->requiresBankVerification)
-                    <flux:button
-                        type="button"
-                        wire:click="verifyAccount"
-                        variant="outline"
-                        :disabled="$is_verifying"
-                    >
-                        @if($is_verifying)
+                @if ($this->requiresBankVerification)
+                    <flux:button type="button" wire:click="verifyAccount" variant="outline" :disabled="$is_verifying">
+                        @if ($is_verifying)
                             <flux:icon.arrow-path class="h-4 w-4 animate-spin" />
                             Verifying...
                         @else
@@ -91,7 +80,7 @@
                     </flux:button>
                 @endif
 
-                @if($verification_status === 'verified' || $verification_status === 'skipped')
+                @if ($verification_status === 'verified' || $verification_status === 'skipped')
                     <div class="flex items-center text-primary-600">
                         <flux:icon.check-circle class="h-5 w-5" />
                         <flux:text size="sm" class="ml-2 font-medium">
@@ -106,27 +95,31 @@
                 @endif
             </div>
 
-            @if($account_name && ($verification_status === 'verified' || $verification_status === 'skipped'))
+            @if ($account_name && ($verification_status === 'verified' || $verification_status === 'skipped'))
                 <div class="rounded-md border border-primary-200 bg-primary-50 p-4">
                     <flux:text class="font-medium text-primary-800">Account Name: {{ $account_name }}</flux:text>
-                    @if($this->requiresBankVerification)
-                        <flux:text size="sm" class="mt-1 text-primary-600">Bank: {{ $this->getBankName($bank_code) }}</flux:text>
+                    @if ($this->requiresBankVerification)
+                        <flux:text size="sm" class="mt-1 text-primary-600">Bank:
+                            {{ $this->getBankName($bank_code) }}</flux:text>
                     @endif
                 </div>
             @endif
 
-            <div class="flex justify-end">
-                <flux:button
-                    wire:click="createPaymentAccount"
-                    variant="primary"
-                    :disabled="$is_creating_subaccount"
-                    class="min-w-37.5"
-                >
-                    @if($is_creating_subaccount)
+            <div class="flex gap-2 justify-end">
+
+                @if (!$is_creating_subaccount)
+                    <flux:button type="button" wire:click="cancelChangingAccount" variant="filled">
+                        Cancel
+                    </flux:button>
+                @endif
+
+                <flux:button wire:click="createPaymentAccount" variant="primary" :disabled="$is_creating_subaccount"
+                    class="min-w-37.5">
+                    @if ($is_creating_subaccount)
                         <flux:icon.arrow-path class="h-4 w-4 animate-spin" />
-                        Creating Account...
+                        {{ $this->paymentAccountSubmittingLabel }}
                     @else
-                        Create Payment Account
+                        {{ $this->paymentAccountSubmitLabel }}
                     @endif
                 </flux:button>
             </div>

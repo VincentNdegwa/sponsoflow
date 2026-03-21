@@ -6,6 +6,7 @@ use App\Enums\BookingStatus;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\PaymentConfiguration;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\PaymentReceivedNotification;
 use App\Services\ExchangeRateService;
@@ -198,50 +199,73 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                     ? $this->convertFromSmallestUnit((int) $data['data']['fees'], $payment->currency)
                     : null;
                 $escrowAmount = max(round($paidAmount - $platformFeeAmount, 2), 0);
-                $conversion = [
-                    'amount_usd' => $payment->currency === 'USD' ? $paidAmount : $payment->amount_usd,
-                    'exchange_rate_to_usd' => $payment->currency === 'USD' ? 1 : $payment->exchange_rate_to_usd,
-                    'provider' => $payment->currency === 'USD' ? 'identity' : $payment->exchange_rate_provider,
-                    'fetched_at' => $payment->exchange_rate_fetched_at,
+                $localBreakdown = [
+                    'currency' => $payment->currency,
+                    'gross_amount' => $paidAmount,
+                    'platform_fee_amount' => $platformFeeAmount,
+                    'processor_fee_amount' => $processorFeeAmount,
+                    'escrow_amount' => $escrowAmount,
+                    'creator_payout_amount' => $escrowAmount,
+                    'requested_amount' => isset($data['data']['requested_amount'])
+                        ? $this->convertFromSmallestUnit((int) $data['data']['requested_amount'], $payment->currency)
+                        : null,
                 ];
+                if ($payment->currency === 'USD') {
+                    $conversion = [
+                        'amount_usd' => $paidAmount,
+                        'exchange_rate_to_usd' => 1,
+                        'provider' => 'identity',
+                        'fetched_at' => now(),
+                    ];
+                } else {
+                    $storedRate = (float) ($payment->exchange_rate_to_usd ?? 0);
 
-                try {
-                    $conversion = app(ExchangeRateService::class)->convertToUsd($paidAmount, $payment->currency);
-                } catch (\Throwable $exception) {
-                    Log::warning('Unable to refresh USD conversion for Paystack payment', [
-                        'payment_id' => $payment->id,
-                        'reference' => $reference,
-                        'error' => $exception->getMessage(),
-                    ]);
+                    if ($storedRate > 0) {
+                        $conversion = [
+                            'amount_usd' => round($paidAmount * $storedRate, 2),
+                            'exchange_rate_to_usd' => $storedRate,
+                            'provider' => $payment->exchange_rate_provider,
+                            'fetched_at' => $payment->exchange_rate_fetched_at,
+                        ];
+                    } else {
+                        try {
+                            $conversion = app(ExchangeRateService::class)->convertToUsd($paidAmount, $payment->currency);
+                        } catch (\Throwable $exception) {
+                            Log::warning('Unable to convert Paystack payment amount to USD', [
+                                'payment_id' => $payment->id,
+                                'reference' => $reference,
+                                'error' => $exception->getMessage(),
+                            ]);
+
+                            $conversion = [
+                                'amount_usd' => $payment->amount_usd,
+                                'exchange_rate_to_usd' => $payment->exchange_rate_to_usd,
+                                'provider' => $payment->exchange_rate_provider,
+                                'fetched_at' => $payment->exchange_rate_fetched_at,
+                            ];
+                        }
+                    }
                 }
+
+                $usdBreakdown = $this->convertBreakdownToUsd($localBreakdown, (float) ($conversion['exchange_rate_to_usd'] ?? 0));
 
                 $payment->update([
                     'provider_transaction_id' => $data['data']['id'],
                     'status' => 'completed',
                     'paid_at' => now(),
                     'amount' => $paidAmount,
-                    'processor_fee_amount' => $processorFeeAmount,
-                    'platform_fee_amount' => $platformFeeAmount,
-                    'escrow_amount' => $escrowAmount,
-                    'creator_payout_amount' => $escrowAmount,
                     'amount_usd' => $conversion['amount_usd'],
                     'exchange_rate_to_usd' => $conversion['exchange_rate_to_usd'],
                     'exchange_rate_provider' => $conversion['provider'],
                     'exchange_rate_fetched_at' => $conversion['fetched_at'],
+                    'amount_breakdown' => [
+                        'local' => $localBreakdown,
+                        'usd' => $usdBreakdown,
+                    ],
                     'provider_data' => array_merge(
                         $payment->provider_data ?? [],
                         [
                             'transaction_data' => $data['data'],
-                            'payment_breakdown' => [
-                                'gross_amount' => $paidAmount,
-                                'platform_fee_amount' => $platformFeeAmount,
-                                'processor_fee_amount' => $processorFeeAmount,
-                                'escrow_amount' => $escrowAmount,
-                                'creator_payout_amount' => $escrowAmount,
-                                'requested_amount' => isset($data['data']['requested_amount'])
-                                    ? $this->convertFromSmallestUnit((int) $data['data']['requested_amount'], $payment->currency)
-                                    : null,
-                            ],
                             'verified_at' => now()->toISOString(),
                         ]
                     ),
@@ -320,108 +344,24 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'provider' => 'paystack',
             ])->first();
 
-            $platformFeePercentage = $this->resolvePlatformFeePercentage($existingConfig);
-
-            $subaccountCode = null;
-            $subaccountId = null;
-            $businessName = $workspace->name;
-            $percentageCharge = $platformFeePercentage;
-            $settlementSchedule = 'manual';
-
             if ($existingConfig && $existingConfig->provider_account_id) {
-                $subaccountCode = $existingConfig->provider_account_id;
-
-                $updatePayload = [
-                    'business_name' => $workspace->name,
-                    'settlement_bank' => $bankDetails['bank_code'],
-                    'account_number' => $bankDetails['account_number'],
-                    'percentage_charge' => $platformFeePercentage,
-                    'description' => 'Creator subaccount for '.$workspace->name,
-                    'primary_contact_email' => $owner->email,
-                    'primary_contact_name' => $owner->name,
-                    'settlement_schedule' => 'manual',
-                ];
-
-                $updateResponse = Http::withToken($this->secretKey)
-                    ->put($this->baseUrl.'/subaccount/'.$subaccountCode, $updatePayload);
-
-                if (! $updateResponse->successful()) {
-                    throw new \Exception('Paystack subaccount update API error: '.$updateResponse->body());
-                }
-
-                $updateData = $updateResponse->json();
-
-                if (! $updateData['status']) {
-                    throw new \Exception('Paystack subaccount update failed: '.$updateData['message']);
-                }
-
-                $subaccountId = $updateData['data']['id'] ?? $existingConfig->provider_data['subaccount_id'] ?? null;
-                $businessName = $updateData['data']['business_name'] ?? $workspace->name;
-                $percentageCharge = $updateData['data']['percentage_charge'] ?? $platformFeePercentage;
-                $settlementSchedule = $updateData['data']['settlement_schedule'] ?? 'manual';
-
-                Log::info('Paystack subaccount updated', [
-                    'workspace_id' => $workspace->id,
-                    'subaccount_code' => $subaccountCode,
-                ]);
-            } else {
-                $createPayload = [
-                    'business_name' => $workspace->name,
-                    'settlement_bank' => $bankDetails['bank_code'],
-                    'account_number' => $bankDetails['account_number'],
-                    'percentage_charge' => $platformFeePercentage,
-                    'description' => 'Creator subaccount for '.$workspace->name,
-                    'primary_contact_email' => $owner->email,
-                    'primary_contact_name' => $owner->name,
-                    'settlement_schedule' => 'manual',
-                ];
-
-                $createResponse = Http::withToken($this->secretKey)
-                    ->post($this->baseUrl.'/subaccount', $createPayload);
-
-                if (! $createResponse->successful()) {
-                    throw new \Exception('Paystack subaccount creation API error: '.$createResponse->body());
-                }
-
-                $createData = $createResponse->json();
-
-                if (! $createData['status']) {
-                    throw new \Exception('Paystack subaccount creation failed: '.$createData['message']);
-                }
-
-                $subaccountCode = $createData['data']['subaccount_code'];
-                $subaccountId = $createData['data']['id'];
-                $businessName = $createData['data']['business_name'];
-                $percentageCharge = $createData['data']['percentage_charge'];
-                $settlementSchedule = $createData['data']['settlement_schedule'];
-
-                Log::info('Paystack subaccount created', [
-                    'workspace_id' => $workspace->id,
-                    'subaccount_code' => $subaccountCode,
-                ]);
+                throw new \Exception('Paystack subaccount already exists. Use update instead.');
             }
 
-            PaymentConfiguration::updateOrCreate(
-                [
-                    'workspace_id' => $workspace->id,
-                    'user_id' => $workspace->owner_id,
-                    'provider' => 'paystack',
-                ],
-                [
-                    'provider_account_id' => $subaccountCode,
-                    'is_active' => true,
-                    'is_verified' => true,
-                    'verified_at' => now(),
-                    'platform_fee_percentage' => $platformFeePercentage,
-                    'provider_data' => [
-                        'subaccount_id' => $subaccountId,
-                        'business_name' => $businessName,
-                        'account_name' => $bankDetails['account_name'],
-                        'percentage_charge' => $percentageCharge,
-                        'settlement_schedule' => $settlementSchedule,
-                        'bank_name' => $this->getBankName($bankDetails['bank_code']),
-                    ],
-                ]
+            $platformFeePercentage = $this->resolvePlatformFeePercentage($existingConfig);
+
+            [$subaccountCode, $subaccountId, $businessName, $percentageCharge, $settlementSchedule] =
+                $this->createSubaccount($workspace, $owner, $bankDetails, $platformFeePercentage);
+
+            $this->persistPaymentConfiguration(
+                $workspace,
+                $subaccountCode,
+                $subaccountId,
+                $businessName,
+                $percentageCharge,
+                $settlementSchedule,
+                $platformFeePercentage,
+                $bankDetails
             );
 
             return [
@@ -430,13 +370,184 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'onboarding_url' => null,
             ];
         } catch (\Exception $e) {
-            Log::error('Failed to create/update Paystack subaccount', [
+            Log::error('Failed to create Paystack subaccount', [
                 'workspace_id' => $workspace->id,
                 'error' => $e->getMessage(),
             ]);
 
-            throw new \Exception('Failed to create payment account: '.$e->getMessage());
+            throw new \Exception($e->getMessage());
         }
+    }
+
+    public function updateConnectAccount(Workspace $workspace, array $bankDetails = []): array
+    {
+        try {
+            if (empty($bankDetails)) {
+                throw new \Exception('Bank details required for subaccount update');
+            }
+
+            if (! isset($bankDetails['account_number']) || ! isset($bankDetails['bank_code']) || ! isset($bankDetails['account_name'])) {
+                throw new \Exception('Account number, bank code, and account name are required');
+            }
+
+            $owner = $workspace->owner;
+            if (! $owner) {
+                throw new \Exception('No workspace owner found');
+            }
+
+            $existingConfig = PaymentConfiguration::where([
+                'workspace_id' => $workspace->id,
+                'user_id' => $workspace->owner_id,
+                'provider' => 'paystack',
+            ])->first();
+
+            if (! $existingConfig || ! $existingConfig->provider_account_id) {
+                throw new \Exception('No existing Paystack subaccount found. Create one first.');
+            }
+
+            $platformFeePercentage = $this->resolvePlatformFeePercentage($existingConfig);
+            $subaccountCode = $existingConfig->provider_account_id;
+
+            $updatePayload = [
+                'business_name' => $workspace->name,
+                'bank_code' => $bankDetails['bank_code'],
+                'account_number' => $bankDetails['account_number'],
+                'percentage_charge' => $platformFeePercentage,
+                'description' => 'Creator subaccount for '.$workspace->name,
+                'primary_contact_email' => $owner->email,
+                'primary_contact_name' => $owner->name,
+                'settlement_schedule' => 'manual',
+                'active' => true
+            ];
+
+            $updateResponse = $this->updateSubaccount($subaccountCode, $updatePayload);
+
+            if (! $updateResponse->successful()) {
+                throw new \Exception('Paystack subaccount update API error: '.$updateResponse->body());
+            }
+
+            $updateData = $updateResponse->json();
+            if (! ($updateData['status'] ?? false)) {
+                throw new \Exception('Paystack subaccount update failed: '.($updateData['message'] ?? 'Unknown error'));
+            }
+
+            $subaccountId = $updateData['data']['id'] ?? data_get($existingConfig->provider_data, 'subaccount_id');
+            $businessName = $updateData['data']['business_name'] ?? $workspace->name;
+            $percentageCharge = $updateData['data']['percentage_charge'] ?? $platformFeePercentage;
+            $settlementSchedule = $updateData['data']['settlement_schedule'] ?? 'manual';
+
+            $this->persistPaymentConfiguration(
+                $workspace,
+                $subaccountCode,
+                $subaccountId,
+                $businessName,
+                $percentageCharge,
+                $settlementSchedule,
+                $platformFeePercentage,
+                $bankDetails
+            );
+
+            Log::info('Paystack subaccount updated', [
+                'workspace_id' => $workspace->id,
+                'subaccount_code' => $subaccountCode,
+            ]);
+
+            return [
+                'account_id' => $subaccountCode,
+                'account_name' => $bankDetails['account_name'],
+                'onboarding_url' => null,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Failed to update Paystack subaccount', [
+                'workspace_id' => $workspace->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            throw new \Exception($e->getMessage());
+        }
+    }
+
+    protected function persistPaymentConfiguration(
+        Workspace $workspace,
+        string $subaccountCode,
+        mixed $subaccountId,
+        string $businessName,
+        mixed $percentageCharge,
+        string $settlementSchedule,
+        float $platformFeePercentage,
+        array $bankDetails
+    ): void {
+        PaymentConfiguration::updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'user_id' => $workspace->owner_id,
+                'provider' => 'paystack',
+            ],
+            [
+                'provider_account_id' => $subaccountCode,
+                'is_active' => true,
+                'is_verified' => true,
+                'verified_at' => now(),
+                'platform_fee_percentage' => $platformFeePercentage,
+                'provider_data' => [
+                    'subaccount_id' => $subaccountId,
+                    'business_name' => $businessName,
+                    'account_name' => $bankDetails['account_name'],
+                    'bank_code' => $bankDetails['bank_code'],
+                    'bank_type' => $bankDetails['bank_type'] ?? null,
+                    'payment_method' => $bankDetails['payment_method'] ?? null,
+                    'percentage_charge' => $percentageCharge,
+                    'settlement_schedule' => $settlementSchedule,
+                    'bank_name' => $bankDetails['bank_name'] ?? $bankDetails['account_name'],
+                ],
+            ]
+        );
+    }
+
+    protected function createSubaccount(Workspace $workspace, User $owner, array $bankDetails, float $platformFeePercentage): array
+    {
+        $createPayload = [
+            'business_name' => $workspace->name,
+            'settlement_bank' => $bankDetails['bank_code'],
+            'account_number' => $bankDetails['account_number'],
+            'percentage_charge' => $platformFeePercentage,
+            'description' => 'Creator subaccount for '.$workspace->name,
+            'primary_contact_email' => $owner->email,
+            'primary_contact_name' => $owner->name,
+            'settlement_schedule' => 'manual',
+        ];
+
+        $createResponse = Http::withToken($this->secretKey)
+            ->post($this->baseUrl.'/subaccount', $createPayload);
+
+        if (! $createResponse->successful()) {
+            throw new \Exception('Paystack subaccount creation API error: '.$createResponse->body());
+        }
+
+        $createData = $createResponse->json();
+
+        if (! $createData['status']) {
+            throw new \Exception('Paystack subaccount creation failed: '.$createData['message']);
+        }
+
+        Log::info('Paystack subaccount created', [
+            'workspace_id' => $workspace->id,
+            'subaccount_code' => $createData['data']['subaccount_code'],
+        ]);
+
+        return [
+            $createData['data']['subaccount_code'],
+            $createData['data']['id'],
+            $createData['data']['business_name'],
+            $createData['data']['percentage_charge'],
+            $createData['data']['settlement_schedule'],
+        ];
+    }
+
+    protected function updateSubaccount(string $subaccountCode, array $updatePayload)
+    {
+        return Http::withToken($this->secretKey)
+            ->put($this->baseUrl.'/subaccount/'.$subaccountCode, $updatePayload);
     }
 
     public function getOnboardingUrl(PaymentConfiguration $config): ?string
@@ -473,8 +584,17 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 throw new \Exception('No completed Paystack payment found for booking');
             }
 
-            $platformFeeAmount = $payment->platform_fee_amount ?? round($booking->amount_paid * ($config->platform_fee_percentage / 100), 2);
-            $creatorAmount = $payment->creator_payout_amount ?? max(round($payment->amount - $platformFeeAmount, 2), 0);
+            $localBreakdown = data_get($payment->amount_breakdown, 'local', []);
+            $platformFeeAmount = (float) data_get(
+                $localBreakdown,
+                'platform_fee_amount',
+                round($booking->amount_paid * ($config->platform_fee_percentage / 100), 2)
+            );
+            $creatorAmount = (float) data_get(
+                $localBreakdown,
+                'creator_payout_amount',
+                max(round($payment->amount - $platformFeeAmount, 2), 0)
+            );
 
             if ($payment->creator_released_at) {
                 Log::warning('Attempted to release Paystack funds more than once', [
@@ -515,9 +635,15 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'amount' => $creatorAmount,
             ]);
 
+            $updatedBreakdown = $payment->amount_breakdown ?? [];
+            data_set($updatedBreakdown, 'local.creator_released_amount', $creatorAmount);
+
+            $releasedUsdAmount = round($creatorAmount * (float) ($payment->exchange_rate_to_usd ?? 0), 2);
+            data_set($updatedBreakdown, 'usd.creator_released_amount', $releasedUsdAmount);
+
             $payment->update([
-                'creator_released_amount' => $creatorAmount,
                 'creator_released_at' => now(),
+                'amount_breakdown' => $updatedBreakdown,
                 'provider_data' => array_merge(
                     $payment->provider_data ?? [],
                     [
@@ -569,7 +695,38 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 throw new \Exception('Paystack refund failed: '.$data['message']);
             }
 
+            $updatedBreakdown = $payment->amount_breakdown ?? [];
+
+            $localGrossAmount = (float) data_get($updatedBreakdown, 'local.gross_amount', $payment->amount);
+            $localPlatformFeeAmount = (float) data_get($updatedBreakdown, 'local.platform_fee_amount', 0);
+            $localCreatorPayoutAmount = (float) data_get($updatedBreakdown, 'local.creator_payout_amount', 0);
+            $exchangeRateToUsd = (float) ($payment->exchange_rate_to_usd ?? 0);
+
+            data_set($updatedBreakdown, 'local.refunded_amount', $localGrossAmount);
+            data_set($updatedBreakdown, 'local.platform_fee_refunded_amount', $localPlatformFeeAmount);
+            data_set($updatedBreakdown, 'local.creator_payout_reversed_amount', $localCreatorPayoutAmount);
+            data_set($updatedBreakdown, 'local.refund_reason', $reason);
+
+            if ($exchangeRateToUsd > 0) {
+                data_set($updatedBreakdown, 'usd.refunded_amount', round($localGrossAmount * $exchangeRateToUsd, 2));
+                data_set($updatedBreakdown, 'usd.platform_fee_refunded_amount', round($localPlatformFeeAmount * $exchangeRateToUsd, 2));
+                data_set($updatedBreakdown, 'usd.creator_payout_reversed_amount', round($localCreatorPayoutAmount * $exchangeRateToUsd, 2));
+                data_set($updatedBreakdown, 'usd.refund_reason', $reason);
+            }
+
             $payment->markAsRefunded($reason);
+
+            $payment->update([
+                'amount_breakdown' => $updatedBreakdown,
+                'provider_data' => array_merge(
+                    $payment->provider_data ?? [],
+                    [
+                        'refund_data' => $data['data'] ?? null,
+                        'refund_reason' => $reason,
+                        'refunded_at' => now()->toISOString(),
+                    ]
+                ),
+            ]);
 
             Log::info('Payment refunded', [
                 'booking_id' => $booking->id,
@@ -729,8 +886,14 @@ class PaystackPaymentProvider implements PaymentProviderInterface
             );
         }
 
+        $recipientType = $this->resolveTransferRecipientType(
+            $providerData,
+            is_array($bank) ? $bank : [],
+            (string) ($subaccount['currency'] ?? $currency)
+        );
+
         $payload = [
-            'type' => 'nuban',
+            'type' => $recipientType,
             'name' => $subaccount['account_name'] ?? $providerData['business_name'],
             'account_number' => $subaccount['account_number'],
             'bank_code' => $bank['code'],
@@ -771,6 +934,64 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         };
     }
 
+    protected function resolveTransferRecipientType(array $providerData, array $bank, string $currency): string
+    {
+        $storedType = data_get($providerData, 'bank_type');
+        if (is_string($storedType) && $storedType !== '') {
+            return $storedType;
+        }
+
+        $bankType = data_get($bank, 'type');
+        if (is_string($bankType) && $bankType !== '') {
+            return $bankType;
+        }
+
+        $paymentMethod = (string) data_get($providerData, 'payment_method', '');
+        if (str_contains($paymentMethod, 'mobile_money')) {
+            return 'mobile_money';
+        }
+
+        return match (strtoupper($currency)) {
+            'GHS' => 'ghipss',
+            'ZAR' => 'basa',
+            default => 'nuban',
+        };
+    }
+
+    protected function convertBreakdownToUsd(array $localBreakdown, float $exchangeRateToUsd): array
+    {
+        $numericKeys = [
+            'gross_amount',
+            'platform_fee_amount',
+            'processor_fee_amount',
+            'escrow_amount',
+            'creator_payout_amount',
+            'requested_amount',
+        ];
+
+        $usdBreakdown = ['currency' => 'USD'];
+
+        foreach ($numericKeys as $key) {
+            $value = data_get($localBreakdown, $key);
+
+            if ($value === null || ! is_numeric($value)) {
+                $usdBreakdown[$key] = null;
+
+                continue;
+            }
+
+            if ($exchangeRateToUsd <= 0) {
+                $usdBreakdown[$key] = null;
+
+                continue;
+            }
+
+            $usdBreakdown[$key] = round((float) $value * $exchangeRateToUsd, 2);
+        }
+
+        return $usdBreakdown;
+    }
+
     public function getSupportedBanks(string $countryCode = 'NG', ?string $currency = null, ?string $type = null): array
     {
         try {
@@ -804,8 +1025,8 @@ class PaystackPaymentProvider implements PaymentProviderInterface
 
             $data = $response->json();
 
-            if (! $data['status']) {
-                throw new \Exception('Failed to fetch banks: '.$data['message']);
+            if (! ($data['status'] ?? false)) {
+                throw new \Exception('Failed to fetch banks: '.($data['message'] ?? 'Unknown error'));
             }
 
             return collect($data['data'])
@@ -836,13 +1057,13 @@ class PaystackPaymentProvider implements PaymentProviderInterface
     protected function getAvailableChannels(string $countryCode): array
     {
 
-        return ["card", "bank", "apple_pay", "ussd", "qr", "mobile_money", "bank_transfer", "eft", "capitec_pay", "payattitude"];
+        return ['card', 'bank', 'apple_pay', 'ussd', 'qr', 'mobile_money', 'bank_transfer', 'eft', 'capitec_pay', 'payattitude'];
         // $channels = [
         //     'NG' => ['card', 'bank', 'ussd', 'mobile_money', 'bank_transfer'],
         //     'GH' => ['card', 'bank', 'mobile_money'],
         //     'ZA' => ['card', 'bank'],
         //     'KE' => ['card', 'bank', 'mobile_money'],
-        //// ];
+        // // ];
 
         // return $channels[$countryCode] ?? ['card', 'bank'];
     }

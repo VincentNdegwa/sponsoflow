@@ -54,12 +54,25 @@ class SyncExchangeRates extends Command
                 ->chunkById(100, function ($payments) use ($exchangeRateService): void {
                     foreach ($payments as $payment) {
                         $conversion = $exchangeRateService->convertToUsd((float) $payment->amount, $payment->currency);
+                        $amountBreakdown = $payment->amount_breakdown ?? [];
+
+                        if (! data_get($amountBreakdown, 'local.currency')) {
+                            data_set($amountBreakdown, 'local.currency', $payment->currency);
+                        }
+
+                        if (! data_get($amountBreakdown, 'local.gross_amount')) {
+                            data_set($amountBreakdown, 'local.gross_amount', (float) $payment->amount);
+                        }
+
+                        data_set($amountBreakdown, 'usd.currency', 'USD');
+                        data_set($amountBreakdown, 'usd.gross_amount', $conversion['amount_usd']);
 
                         $payment->update([
                             'amount_usd' => $conversion['amount_usd'],
                             'exchange_rate_to_usd' => $conversion['exchange_rate_to_usd'],
                             'exchange_rate_provider' => $conversion['provider'],
                             'exchange_rate_fetched_at' => $conversion['fetched_at'],
+                            'amount_breakdown' => $amountBreakdown,
                         ]);
                     }
                 });
