@@ -7,7 +7,6 @@ use App\Models\Product;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\PaymentService;
-use Mockery;
 
 use function Pest\Laravel\get;
 use function Pest\Laravel\withSession;
@@ -52,7 +51,7 @@ function createCompletedPaystackPayment(string $reference = 're4lyvq3s3'): Booki
 test('paystack callback redirects to success when payment is already completed even if handler throws', function () {
     createCompletedPaystackPayment('re4lyvq3s3');
 
-    $mock = Mockery::mock(PaymentService::class);
+    $mock = \Mockery::mock(PaymentService::class);
     $mock->shouldReceive('handleSuccessfulPayment')
         ->once()
         ->with('re4lyvq3s3', 'paystack')
@@ -61,7 +60,7 @@ test('paystack callback redirects to success when payment is already completed e
 
     $response = get(route('payment.paystack.callback', ['reference' => 're4lyvq3s3']));
 
-    $response->assertRedirect(route('payment.success'));
+    $response->assertRedirect(route('payment.success', ['reference' => 're4lyvq3s3']));
     $response->assertSessionHas('message', 'Payment successful!');
 });
 
@@ -71,4 +70,25 @@ test('payment success page renders when callback flash message exists without se
 
     $response->assertOk();
     $response->assertViewIs('payment.success');
+});
+
+test('payment success page shows claim account cta for unclaimed guest booking', function () {
+    $payment = createCompletedPaystackPayment('claimable-ref');
+
+    $claimUser = User::factory()->create([
+        'email' => 'guest-claim@example.com',
+    ]);
+
+    $payment->booking->update([
+        'guest_name' => 'Guest Claim',
+        'guest_email' => 'guest-claim@example.com',
+        'brand_user_id' => $claimUser->id,
+        'account_claimed' => false,
+    ]);
+
+    $response = get(route('payment.success', ['reference' => 'claimable-ref']));
+
+    $response->assertOk();
+    $response->assertViewIs('payment.success');
+    $response->assertSee('Claim Account');
 });

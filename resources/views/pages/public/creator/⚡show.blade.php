@@ -62,9 +62,6 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
     #[Computed]
     public function isGuestUser(): bool
     {
-        \Log::info("brand user",[
-            "data"=> $this->brandUser
-        ]);
         return !$this->brandUser;
     }
     
@@ -102,11 +99,6 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
         $this->workspace = $user->currentWorkspace();
         $this->brandUser = auth()->user();
         $this->brandWorkspace = $this->brandUser?->currentWorkspace();
-
-        \Log::info(" mount brand user",[
-            "data"=> $this->brandUser,
-            'user' => $this->user
-        ]);
 
         $this->fillGuestDataFromAuth();
     }

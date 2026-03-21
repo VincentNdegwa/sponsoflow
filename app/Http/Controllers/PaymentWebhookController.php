@@ -85,7 +85,8 @@ class PaymentWebhookController extends Controller
         try {
             $this->paymentService->handleSuccessfulPayment($reference, 'paystack');
 
-            return redirect()->route('payment.success')->with('message', 'Payment successful!');
+            return redirect()->route('payment.success', ['reference' => $reference])
+                ->with('message', 'Payment successful!');
         } catch (\Exception $e) {
             Log::error('Paystack callback error', ['error' => $e->getMessage()]);
 
@@ -96,7 +97,8 @@ class PaymentWebhookController extends Controller
                 ->exists();
 
             if ($completedPayment) {
-                return redirect()->route('payment.success')->with('message', 'Payment successful!');
+                return redirect()->route('payment.success', ['reference' => $reference])
+                    ->with('message', 'Payment successful!');
             }
 
             return redirect()->route('payment.cancel')->with('error', 'Payment processing failed');

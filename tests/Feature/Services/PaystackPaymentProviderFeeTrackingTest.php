@@ -3,6 +3,7 @@
 use App\Enums\BookingStatus;
 use App\Models\Booking;
 use App\Models\BookingPayment;
+use App\Models\ExchangeRate;
 use App\Models\PaymentConfiguration;
 use App\Models\Product;
 use App\Models\User;
@@ -147,6 +148,79 @@ test('it records released creator amount when funds are transferred', function (
         ->and($payment->creator_released_at)->not->toBeNull()
         ->and(data_get($payment->provider_data, 'funds_released'))->toBeTrue()
         ->and(data_get($payment->provider_data, 'release_transfer_data.transfer_code'))->toBe('TRF_abc123');
+});
+
+test('it falls back to latest stored usd rate when configured conversion provider is unavailable', function () {
+    config()->set('services.paystack.secret_key', 'sk_test_key');
+    config()->set('currency.default_provider', null);
+
+    $owner = User::factory()->create();
+    $creator = User::factory()->create();
+    $brand = User::factory()->create();
+
+    $workspace = Workspace::factory()->create([
+        'owner_id' => $owner->id,
+        'country_code' => 'KE',
+        'currency' => 'KES',
+    ]);
+
+    $product = Product::factory()->create([
+        'workspace_id' => $workspace->id,
+    ]);
+
+    $booking = Booking::factory()->create([
+        'workspace_id' => $workspace->id,
+        'product_id' => $product->id,
+        'creator_id' => $creator->id,
+        'brand_user_id' => $brand->id,
+        'status' => BookingStatus::PENDING_PAYMENT,
+        'amount_paid' => 54,
+        'currency' => 'KES',
+    ]);
+
+    ExchangeRate::create([
+        'base_currency' => 'KES',
+        'target_currency' => 'USD',
+        'rate' => 0.0077,
+        'provider' => 'seeded-fallback',
+        'effective_date' => now()->toDateString(),
+        'fetched_at' => now(),
+    ]);
+
+    BookingPayment::createForBooking($booking, 'paystack', [
+        'provider_reference' => 'kes_ref_123',
+        'session_id' => 'access_code_kes',
+        'currency' => 'KES',
+        'provider_data' => [
+            'platform_fee_percentage' => 10,
+        ],
+    ]);
+
+    Http::fake([
+        'https://api.paystack.co/transaction/verify/*' => Http::response([
+            'status' => true,
+            'message' => 'Verification successful',
+            'data' => [
+                'id' => 5958125682,
+                'status' => 'success',
+                'reference' => 'kes_ref_123',
+                'amount' => 5400,
+                'currency' => 'KES',
+                'fees' => 81,
+                'requested_amount' => 5400,
+            ],
+        ], 200),
+    ]);
+
+    app(PaystackPaymentProvider::class)->handleSuccessfulPayment('kes_ref_123');
+
+    $payment = BookingPayment::query()->where('provider_reference', 'kes_ref_123')->firstOrFail();
+
+    expect((float) $payment->amount_usd)->toBe(0.42)
+        ->and((float) $payment->exchange_rate_to_usd)->toBe(0.0077)
+        ->and($payment->exchange_rate_provider)->toBe('seeded-fallback')
+        ->and((float) data_get($payment->amount_breakdown, 'usd.gross_amount'))->toBe(0.42)
+        ->and((float) data_get($payment->amount_breakdown, 'usd.creator_payout_amount'))->toBe(0.37);
 });
 
 test('it uses and persists platform fee percentage when creating paystack connect account', function () {

@@ -20,7 +20,7 @@ class GuestAccountCreationServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         Role::create(['name' => 'brand-admin', 'display_name' => 'Brand Admin']);
         Role::create(['name' => 'creator-owner', 'display_name' => 'Creator Owner']);
     }
@@ -31,7 +31,7 @@ class GuestAccountCreationServiceTest extends TestCase
 
         $workspace = Workspace::factory()->create(['type' => 'creator']);
         $product = Product::factory()->create(['workspace_id' => $workspace->id]);
-        
+
         $booking = Booking::factory()->create([
             'product_id' => $product->id,
             'workspace_id' => $workspace->id,
@@ -60,6 +60,7 @@ class GuestAccountCreationServiceTest extends TestCase
         $booking->refresh();
         $this->assertEquals($user->id, $booking->brand_user_id);
         $this->assertEquals($brandWorkspace->id, $booking->brand_workspace_id);
+        $this->assertFalse($booking->account_claimed);
 
         // Check notification was sent
         Notification::assertSentTo($user, ClaimAccountNotification::class);
@@ -70,15 +71,15 @@ class GuestAccountCreationServiceTest extends TestCase
         $existingUser = User::factory()->create(['email' => 'john@example.com']);
         $creatorWorkspace = Workspace::factory()->create([
             'type' => 'creator',
-            'owner_id' => $existingUser->id
+            'owner_id' => $existingUser->id,
         ]);
-        
+
         $creatorRole = Role::where('name', 'creator-owner')->first();
         $existingUser->addRole($creatorRole, $creatorWorkspace);
-        
+
         $workspace = Workspace::factory()->create(['type' => 'creator']);
         $product = Product::factory()->create(['workspace_id' => $workspace->id]);
-        
+
         $booking = Booking::factory()->create([
             'product_id' => $product->id,
             'workspace_id' => $workspace->id,
@@ -94,7 +95,7 @@ class GuestAccountCreationServiceTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertEquals($existingUser->id, $result->id);
-        
+
         $brandWorkspace = $existingUser->workspaces()->where('type', 'brand')->first();
         $this->assertNotNull($brandWorkspace);
         $this->assertEquals('Acme Corp', $brandWorkspace->name);
@@ -102,6 +103,7 @@ class GuestAccountCreationServiceTest extends TestCase
         $booking->refresh();
         $this->assertEquals($existingUser->id, $booking->brand_user_id);
         $this->assertEquals($brandWorkspace->id, $booking->brand_workspace_id);
+        $this->assertTrue($booking->account_claimed);
 
         $this->assertEquals(2, $existingUser->workspaces()->count());
     }
@@ -112,15 +114,15 @@ class GuestAccountCreationServiceTest extends TestCase
         $brandWorkspace = Workspace::factory()->create([
             'type' => 'brand',
             'owner_id' => $existingUser->id,
-            'name' => 'Existing Brand Workspace'
+            'name' => 'Existing Brand Workspace',
         ]);
-        
+
         $brandRole = Role::where('name', 'brand-admin')->first();
         $existingUser->addRole($brandRole, $brandWorkspace);
-        
+
         $workspace = Workspace::factory()->create(['type' => 'creator']);
         $product = Product::factory()->create(['workspace_id' => $workspace->id]);
-        
+
         $booking = Booking::factory()->create([
             'product_id' => $product->id,
             'workspace_id' => $workspace->id,
@@ -137,6 +139,7 @@ class GuestAccountCreationServiceTest extends TestCase
         $booking->refresh();
         $this->assertEquals($existingUser->id, $booking->brand_user_id);
         $this->assertEquals($brandWorkspace->id, $booking->brand_workspace_id);
+        $this->assertTrue($booking->account_claimed);
 
         $this->assertEquals(1, $existingUser->workspaces()->count());
     }
@@ -147,7 +150,7 @@ class GuestAccountCreationServiceTest extends TestCase
 
         $workspace = Workspace::factory()->create(['type' => 'creator']);
         $product = Product::factory()->create(['workspace_id' => $workspace->id]);
-        
+
         $booking = Booking::factory()->create([
             'product_id' => $product->id,
             'workspace_id' => $workspace->id,

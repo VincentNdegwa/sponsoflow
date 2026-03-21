@@ -8,14 +8,39 @@
                         Payment Successful!
                     </h2>
                     <p class="mt-2 text-sm text-gray-600">
-                        Your sponsorship booking has been confirmed.
+                        {{ $success ?? 'Your sponsorship booking has been confirmed.' }}
                     </p>
-                    
-                    <div class="mt-6">
-                        <flux:button href="{{ route('home') }}" variant="primary">
-                            Return Home
-                        </flux:button>
-                    </div>
+
+                    @if (!empty($claim_account_url))
+                        <div class="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-left">
+                            <p class="text-sm font-medium text-amber-900">Claim your account to manage this booking</p>
+                            <p class="mt-1 text-sm text-amber-800">
+                                We created an account for {{ $claim_account_email }}. Set your password now to access
+                                your brand workspace and track this booking.
+                            </p>
+                            <div class="mt-4">
+                                <flux:button class="w-full" href="{{ $claim_account_url }}" variant="primary"
+                                    icon="user-plus">
+                                    Claim Account
+                                </flux:button>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if (auth()->user())
+                        <div class="mt-1">
+                            <flux:button class="w-full" href="{{ route('dashboard') }}" variant="filled">
+                                Dashboard
+                            </flux:button>
+                        </div>
+                    @else
+                        <div class="mt-6">
+                            <flux:button class="w-full" href="{{ route('home') }}" variant="filled">
+                                Return Home
+                            </flux:button>
+                        </div>
+                    @endif
+
                 </div>
             </div>
         </div>

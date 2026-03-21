@@ -44,15 +44,15 @@ class GuestAccountCreationService
     private function handleExistingUser(User $user, Booking $booking): User
     {
         $brandWorkspace = $user->workspaces()->where('type', 'brand')->first();
-        
-        if (!$brandWorkspace) {
-            $workspaceName = $booking->guest_company 
-                ? $booking->guest_company 
-                : $user->name . "'s Brand Workspace";
-            
+
+        if (! $brandWorkspace) {
+            $workspaceName = $booking->guest_company
+                ? $booking->guest_company
+                : $user->name."'s Brand Workspace";
+
             $brandWorkspace = $this->createWorkspace($workspaceName, $user);
             $this->assignRole($user, $brandWorkspace, 'brand');
-            
+
             Log::info('Brand workspace created for existing user', [
                 'user_id' => $user->id,
                 'workspace_id' => $brandWorkspace->id,
@@ -63,6 +63,8 @@ class GuestAccountCreationService
         $booking->update([
             'brand_user_id' => $user->id,
             'brand_workspace_id' => $brandWorkspace->id,
+            'account_claimed' => true,
+            'claimed_at' => now(),
         ]);
 
         Log::info('Booking updated with existing user details', [
@@ -80,13 +82,13 @@ class GuestAccountCreationService
             $user = User::create([
                 'name' => $booking->guest_name,
                 'email' => $booking->guest_email,
-                'password' => Hash::make(Str::random(32)), 
-                'email_verified_at' => null, 
+                'password' => Hash::make(Str::random(32)),
+                'email_verified_at' => null,
             ]);
 
-            $workspaceName = $booking->guest_company 
-                ? $booking->guest_company 
-                : $booking->guest_name . "'s Brand Workspace";
+            $workspaceName = $booking->guest_company
+                ? $booking->guest_company
+                : $booking->guest_name."'s Brand Workspace";
 
             $workspace = $this->createWorkspace($workspaceName, $user);
             $this->assignRole($user, $workspace, 'brand');
@@ -94,6 +96,8 @@ class GuestAccountCreationService
             $booking->update([
                 'brand_user_id' => $user->id,
                 'brand_workspace_id' => $workspace->id,
+                'account_claimed' => false,
+                'claimed_at' => null,
             ]);
 
             $user->notify(new ClaimAccountNotification($booking, $workspace));
@@ -109,15 +113,14 @@ class GuestAccountCreationService
         });
     }
 
-
     private function createWorkspace(string $workspaceName, User $user): Workspace
     {
         $baseSlug = Str::slug($workspaceName);
-        $slug = $baseSlug . '-brand';
+        $slug = $baseSlug.'-brand';
 
         $counter = 1;
         while (Workspace::where('slug', $slug)->exists()) {
-            $slug = $baseSlug . '-brand-' . $counter;
+            $slug = $baseSlug.'-brand-'.$counter;
             $counter++;
         }
 
@@ -134,7 +137,7 @@ class GuestAccountCreationService
     {
         $roleName = $workspaceType === 'creator' ? 'creator-owner' : 'brand-admin';
         $role = Role::where('name', $roleName)->first();
-        
+
         if ($role) {
             $user->addRole($role, $workspace);
         }

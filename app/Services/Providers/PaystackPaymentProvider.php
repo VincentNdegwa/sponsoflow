@@ -5,6 +5,7 @@ namespace App\Services\Providers;
 use App\Enums\BookingStatus;
 use App\Models\Booking;
 use App\Models\BookingPayment;
+use App\Models\ExchangeRate;
 use App\Models\PaymentConfiguration;
 use App\Models\User;
 use App\Models\Workspace;
@@ -210,44 +211,22 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                         ? $this->convertFromSmallestUnit((int) $data['data']['requested_amount'], $payment->currency)
                         : null,
                 ];
-                if ($payment->currency === 'USD') {
-                    $conversion = [
-                        'amount_usd' => $paidAmount,
-                        'exchange_rate_to_usd' => 1,
-                        'provider' => 'identity',
-                        'fetched_at' => now(),
-                    ];
-                } else {
-                    $storedRate = (float) ($payment->exchange_rate_to_usd ?? 0);
+                $conversion = $this->resolveUsdConversion($payment, $paidAmount, $reference);
 
-                    if ($storedRate > 0) {
-                        $conversion = [
-                            'amount_usd' => round($paidAmount * $storedRate, 2),
-                            'exchange_rate_to_usd' => $storedRate,
-                            'provider' => $payment->exchange_rate_provider,
-                            'fetched_at' => $payment->exchange_rate_fetched_at,
-                        ];
-                    } else {
-                        try {
-                            $conversion = app(ExchangeRateService::class)->convertToUsd($paidAmount, $payment->currency);
-                        } catch (\Throwable $exception) {
-                            Log::warning('Unable to convert Paystack payment amount to USD', [
-                                'payment_id' => $payment->id,
-                                'reference' => $reference,
-                                'error' => $exception->getMessage(),
-                            ]);
+                $effectiveRate = (float) ($conversion['exchange_rate_to_usd'] ?? 0);
+                $amountUsd = $conversion['amount_usd'] ?? null;
 
-                            $conversion = [
-                                'amount_usd' => $payment->amount_usd,
-                                'exchange_rate_to_usd' => $payment->exchange_rate_to_usd,
-                                'provider' => $payment->exchange_rate_provider,
-                                'fetched_at' => $payment->exchange_rate_fetched_at,
-                            ];
-                        }
-                    }
+                if ($effectiveRate <= 0 && is_numeric($amountUsd) && $paidAmount > 0) {
+                    $effectiveRate = round(((float) $amountUsd) / $paidAmount, 10);
+                    $conversion['exchange_rate_to_usd'] = $effectiveRate;
                 }
 
-                $usdBreakdown = $this->convertBreakdownToUsd($localBreakdown, (float) ($conversion['exchange_rate_to_usd'] ?? 0));
+                if (! is_numeric($amountUsd) && $effectiveRate > 0) {
+                    $amountUsd = round($paidAmount * $effectiveRate, 2);
+                    $conversion['amount_usd'] = $amountUsd;
+                }
+
+                $usdBreakdown = $this->convertBreakdownToUsd($localBreakdown, $effectiveRate);
 
                 $payment->update([
                     'provider_transaction_id' => $data['data']['id'],
@@ -417,7 +396,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'primary_contact_email' => $owner->email,
                 'primary_contact_name' => $owner->name,
                 'settlement_schedule' => 'manual',
-                'active' => true
+                'active' => true,
             ];
 
             $updateResponse = $this->updateSubaccount($subaccountCode, $updatePayload);
@@ -843,6 +822,63 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         $normalizedPercentage = max(0, min(100, (float) $percentage));
 
         return round($normalizedPercentage, 4);
+    }
+
+    protected function resolveUsdConversion(BookingPayment $payment, float $paidAmount, string $reference): array
+    {
+        if (strtoupper($payment->currency) === 'USD') {
+            return [
+                'amount_usd' => $paidAmount,
+                'exchange_rate_to_usd' => 1.0,
+                'provider' => 'identity',
+                'fetched_at' => now(),
+            ];
+        }
+
+        $storedRate = (float) ($payment->exchange_rate_to_usd ?? 0);
+        if ($storedRate > 0) {
+            return [
+                'amount_usd' => round($paidAmount * $storedRate, 2),
+                'exchange_rate_to_usd' => $storedRate,
+                'provider' => $payment->exchange_rate_provider,
+                'fetched_at' => $payment->exchange_rate_fetched_at,
+            ];
+        }
+
+        try {
+            return app(ExchangeRateService::class)->convertToUsd($paidAmount, $payment->currency);
+        } catch (\Throwable $exception) {
+            Log::warning('Unable to convert Paystack payment amount to USD via configured provider', [
+                'payment_id' => $payment->id,
+                'reference' => $reference,
+                'currency' => $payment->currency,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        $fallbackRate = ExchangeRate::query()
+            ->where('base_currency', strtoupper((string) $payment->currency))
+            ->where('target_currency', 'USD')
+            ->latest('fetched_at')
+            ->first();
+
+        if ($fallbackRate && (float) $fallbackRate->rate > 0) {
+            $rate = (float) $fallbackRate->rate;
+
+            return [
+                'amount_usd' => round($paidAmount * $rate, 2),
+                'exchange_rate_to_usd' => $rate,
+                'provider' => $fallbackRate->provider,
+                'fetched_at' => $fallbackRate->fetched_at,
+            ];
+        }
+
+        return [
+            'amount_usd' => $payment->amount_usd,
+            'exchange_rate_to_usd' => $payment->exchange_rate_to_usd,
+            'provider' => $payment->exchange_rate_provider,
+            'fetched_at' => $payment->exchange_rate_fetched_at,
+        ];
     }
 
     protected function createTransferRecipient(PaymentConfiguration $config, string $currency): string
