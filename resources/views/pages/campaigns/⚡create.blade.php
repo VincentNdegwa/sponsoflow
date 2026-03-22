@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Campaign;
 use App\Models\CampaignTemplate;
 use App\Models\DeliverableOption;
 use App\Services\CampaignService;
@@ -9,6 +10,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component {
+    public ?int $campaignId = null;
     public ?int $templateId = null;
     public string $title = '';
     public bool $isPublic = false;
@@ -17,7 +19,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
     public array $contentBrief = [];
     public array $deliverables = [];
 
-    public function mount(): void
+    public function mount(?int $campaign = null): void
     {
         $workspace = currentWorkspace();
 
@@ -34,6 +36,61 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
                 'options' => [],
             ]);
         }
+
+        if (! $campaign) {
+            return;
+        }
+
+        $existingCampaign = Campaign::query()
+            ->where('id', $campaign)
+            ->where('workspace_id', $workspace->id)
+            ->firstOrFail();
+
+        $this->campaignId = $existingCampaign->id;
+        $this->templateId = $existingCampaign->template_id;
+        $this->title = (string) $existingCampaign->title;
+        $this->isPublic = (bool) $existingCampaign->is_public;
+
+        $schemaFields = (array) data_get($existingCampaign->content_brief, '_form_schema.sections.0.fields', []);
+
+        if ($schemaFields !== []) {
+            $this->briefFields = [];
+            $this->contentBrief = [];
+
+            foreach ($schemaFields as $field) {
+                $name = (string) data_get($field, 'name', '');
+
+                if ($name === '') {
+                    continue;
+                }
+
+                $options = array_values((array) data_get($field, 'options', []));
+
+                $this->briefFields[] = [
+                    'key' => $name,
+                    'label' => (string) data_get($field, 'label', $name),
+                    'type' => (string) data_get($field, 'type', 'text'),
+                    'options' => $options,
+                    'options_text' => implode(', ', $options),
+                ];
+
+                $this->contentBrief[$name] = (string) data_get($existingCampaign->content_brief, $name, '');
+            }
+        }
+
+        $existingDeliverables = (array) ($existingCampaign->deliverables ?? []);
+
+        if ($existingDeliverables !== []) {
+            $this->deliverables = [];
+
+            foreach ($existingDeliverables as $row) {
+                $optionId = (int) data_get($row, 'deliverable_option_id', 0);
+
+                if ($optionId > 0) {
+                    $this->addDeliverable($optionId, (array) $row);
+                }
+            }
+        }
     }
 
     #[Computed]
@@ -41,15 +98,13 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
     {
         $workspaceId = currentWorkspace()?->id;
 
+        if (! $workspaceId) {
+            return collect();
+        }
+
         return CampaignTemplate::query()
             ->with('category')
-            ->where(function ($query) use ($workspaceId) {
-                $query->whereNull('workspace_id');
-
-                if ($workspaceId) {
-                    $query->orWhere('workspace_id', $workspaceId);
-                }
-            })
+            ->where('workspace_id', $workspaceId)
             ->orderBy('name')
             ->get();
     }
@@ -305,10 +360,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
         if ($this->templateId) {
             $template = CampaignTemplate::query()
                 ->where('id', $this->templateId)
-                ->where(function ($query) use ($brandWorkspace) {
-                    $query->whereNull('workspace_id')
-                        ->orWhere('workspace_id', $brandWorkspace->id);
-                })
+                ->where('workspace_id', $brandWorkspace->id)
                 ->firstOrFail();
         }
 
@@ -353,6 +405,28 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
         $contentBriefPayload = array_merge($contentBriefAnswers, [
             '_form_schema' => $formSchema,
         ]);
+
+        if ($this->campaignId) {
+            $campaign = Campaign::query()
+                ->where('id', $this->campaignId)
+                ->where('workspace_id', $brandWorkspace->id)
+                ->firstOrFail();
+
+            app(CampaignService::class)->updateCampaign(
+                campaign: $campaign,
+                template: $template,
+                contentBrief: $contentBriefPayload,
+                deliverables: $this->deliverables,
+                title: $this->title,
+                isPublic: $this->isPublic,
+                status: $campaign->status,
+            );
+
+            $this->dispatch('success', 'Campaign updated successfully.');
+            $this->redirect(route('campaigns.index'), navigate: true);
+
+            return;
+        }
 
         app(CampaignService::class)->createCampaign(
             template: $template,
@@ -515,8 +589,8 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
 <div>
     <div class="mb-8 flex items-center justify-between gap-4">
         <div>
-            <flux:heading size="xl">Create Campaign</flux:heading>
-            <flux:subheading>Create a brand campaign brief and define deliverables.</flux:subheading>
+            <flux:heading size="xl">{{ $campaignId ? 'Edit Campaign' : 'Create Campaign' }}</flux:heading>
+            <flux:subheading>{{ $campaignId ? 'Update your campaign brief and deliverables.' : 'Create a brand campaign brief and define deliverables.' }}</flux:subheading>
         </div>
 
         <flux:button variant="ghost" href="{{ route('campaigns.index') }}">
@@ -673,7 +747,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
         </section>
 
         <div class="flex justify-end">
-            <flux:button type="submit" variant="primary">Create Campaign</flux:button>
+            <flux:button type="submit" variant="primary">{{ $campaignId ? 'Save Campaign' : 'Create Campaign' }}</flux:button>
         </div>
     </form>
 </div>

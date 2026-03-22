@@ -40,6 +40,42 @@ class CampaignService
         });
     }
 
+    public function updateCampaign(
+        Campaign $campaign,
+        ?CampaignTemplate $template,
+        array $contentBrief,
+        array $deliverables,
+        ?string $title = null,
+        ?bool $isPublic = null,
+        ?CampaignStatus $status = null,
+    ): Campaign {
+        $brandWorkspace = currentWorkspace();
+
+        if (! $brandWorkspace || ! $brandWorkspace->isBrand()) {
+            throw new AuthorizationException('A brand account is required to update campaigns.');
+        }
+
+        if ((int) $campaign->workspace_id !== (int) $brandWorkspace->id) {
+            throw new AuthorizationException('You can only update your own campaigns.');
+        }
+
+        $normalizedDeliverables = $this->normalizeDeliverables($deliverables);
+
+        return DB::transaction(function () use ($campaign, $template, $contentBrief, $normalizedDeliverables, $title, $isPublic, $status) {
+            $campaign->update([
+                'template_id' => $template?->id,
+                'title' => $title ?: $campaign->title,
+                'total_budget' => $this->calculateTotalBudget($normalizedDeliverables),
+                'content_brief' => $contentBrief,
+                'deliverables' => $normalizedDeliverables,
+                'status' => $status?->value ?? $campaign->status,
+                'is_public' => $isPublic ?? $campaign->is_public,
+            ]);
+
+            return $campaign->refresh();
+        });
+    }
+
     public function normalizeDeliverables(array $deliverables): array
     {
         $normalized = [];
