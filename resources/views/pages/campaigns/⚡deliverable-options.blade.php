@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\DeliverableOption;
+use App\Support\CampaignFieldTypeRegistry;
 use App\Services\DeliverableOptionService;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
@@ -83,6 +84,16 @@ new #[Layout('layouts::app'), Title('Deliverable Options')] class extends Compon
         $this->resetPage('starterOptionsPage');
     }
 
+    public function fieldTypeOptions(): array
+    {
+        return CampaignFieldTypeRegistry::selectOptions();
+    }
+
+    public function fieldTypeRequiresOptions(string $type): bool
+    {
+        return CampaignFieldTypeRegistry::requiresOptions($type);
+    }
+
     public function addField(array $defaults = []): void
     {
         $index = count($this->fields);
@@ -148,7 +159,7 @@ new #[Layout('layouts::app'), Title('Deliverable Options')] class extends Compon
         $validated = $this->validate($this->rules());
 
         foreach ((array) data_get($validated, 'fields', []) as $index => $field) {
-            if ((string) data_get($field, 'type') !== 'select') {
+            if (! $this->fieldTypeRequiresOptions((string) data_get($field, 'type', 'text'))) {
                 continue;
             }
 
@@ -292,7 +303,7 @@ new #[Layout('layouts::app'), Title('Deliverable Options')] class extends Compon
             'isActive' => 'boolean',
             'fields' => 'nullable|array',
             'fields.*.label' => 'required|string|min:2|max:120',
-            'fields.*.type' => 'required|string|in:text,textarea,select,number,date',
+            'fields.*.type' => 'required|string|'.CampaignFieldTypeRegistry::validationRule(),
             'fields.*.required' => 'boolean',
             'fields.*.options' => 'nullable|array',
             'fields.*.options.*' => 'string|max:120',
@@ -473,11 +484,9 @@ new #[Layout('layouts::app'), Title('Deliverable Options')] class extends Compon
                                 <flux:field>
                                     <flux:label>Type</flux:label>
                                     <flux:select wire:model.live="fields.{{ $index }}.type">
-                                        <option value="text">Text</option>
-                                        <option value="textarea">Textarea</option>
-                                        <option value="select">Select</option>
-                                        <option value="number">Number</option>
-                                        <option value="date">Date</option>
+                                        @foreach($this->fieldTypeOptions() as $type)
+                                            <option value="{{ $type['value'] }}">{{ $type['label'] }}</option>
+                                        @endforeach
                                     </flux:select>
                                 </flux:field>
 
@@ -493,7 +502,7 @@ new #[Layout('layouts::app'), Title('Deliverable Options')] class extends Compon
                                 </div>
                             </div>
 
-                            @if(($field['type'] ?? 'text') === 'select')
+                            @if($this->fieldTypeRequiresOptions((string) ($field['type'] ?? 'text')))
                                 <div class="mt-3">
                                     <flux:field>
                                         <flux:label>Select Options (comma separated)</flux:label>

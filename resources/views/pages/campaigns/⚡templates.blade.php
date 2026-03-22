@@ -2,6 +2,7 @@
 
 use App\Models\CampaignTemplate;
 use App\Models\DeliverableOption;
+use App\Support\CampaignFieldTypeRegistry;
 use App\Services\CampaignCategoryService;
 use App\Services\CampaignTemplateService;
 use App\Services\DeliverableOptionService;
@@ -94,6 +95,16 @@ new #[Layout('layouts::app'), Title('Campaign Templates')] class extends Compone
     public function updatedStarterSearch(): void
     {
         $this->resetPage('starterTemplatesPage');
+    }
+
+    public function fieldTypeOptions(): array
+    {
+        return CampaignFieldTypeRegistry::selectOptions();
+    }
+
+    public function fieldTypeRequiresOptions(string $type): bool
+    {
+        return CampaignFieldTypeRegistry::requiresOptions($type);
     }
 
     #[Computed]
@@ -336,7 +347,7 @@ new #[Layout('layouts::app'), Title('Campaign Templates')] class extends Compone
             'categoryId' => 'nullable|integer|exists:categories,id',
             'briefFields' => 'required|array|min:1',
             'briefFields.*.label' => 'required|string|min:2|max:120',
-            'briefFields.*.type' => 'required|string|in:text,textarea,select,number,date',
+            'briefFields.*.type' => 'required|string|'.CampaignFieldTypeRegistry::validationRule(),
             'briefFields.*.options' => 'nullable|array',
             'briefFields.*.options.*' => 'string|max:120',
             'templateDeliverables' => 'required|array|min:1',
@@ -365,7 +376,7 @@ new #[Layout('layouts::app'), Title('Campaign Templates')] class extends Compone
                     'name' => $key,
                     'label' => (string) $field['label'],
                     'type' => (string) $field['type'],
-                    'options' => $field['type'] === 'select'
+                    'options' => $this->fieldTypeRequiresOptions((string) $field['type'])
                         ? array_values((array) data_get($field, 'options', []))
                         : [],
                 ];
@@ -661,11 +672,9 @@ new #[Layout('layouts::app'), Title('Campaign Templates')] class extends Compone
                             <flux:field>
                                 <flux:label>Type</flux:label>
                                 <flux:select wire:model.live="briefFields.{{ $index }}.type">
-                                    <option value="text">Text</option>
-                                    <option value="textarea">Textarea</option>
-                                    <option value="select">Select</option>
-                                    <option value="number">Number</option>
-                                    <option value="date">Date</option>
+                                    @foreach($this->fieldTypeOptions() as $type)
+                                        <option value="{{ $type['value'] }}">{{ $type['label'] }}</option>
+                                    @endforeach
                                 </flux:select>
                                 <flux:error name="briefFields.{{ $index }}.type" />
                             </flux:field>
@@ -674,7 +683,7 @@ new #[Layout('layouts::app'), Title('Campaign Templates')] class extends Compone
                                 <flux:button type="button" size="sm" variant="danger" icon="trash" wire:click="removeBriefField({{ $index }})"></flux:button>
                             </div>
 
-                            @if(($field['type'] ?? 'text') === 'select')
+                            @if($this->fieldTypeRequiresOptions((string) ($field['type'] ?? 'text')))
                                 <div class="md:col-span-4">
                                     <flux:field>
                                         <flux:label>Select Options (comma separated)</flux:label>

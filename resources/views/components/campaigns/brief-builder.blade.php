@@ -1,3 +1,17 @@
+@props([
+    'fieldTypeOptions' => [],
+])
+
+@php
+    $resolvedFieldTypeOptions = $fieldTypeOptions !== []
+        ? $fieldTypeOptions
+        : \App\Support\CampaignFieldTypeRegistry::selectOptions();
+
+    $fieldTypeMeta = collect($resolvedFieldTypeOptions)
+        ->keyBy('value')
+        ->toArray();
+@endphp
+
 <section class="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
     <div class="mb-4 flex items-center justify-between gap-3">
         <div>
@@ -25,10 +39,9 @@
                     <flux:field>
                         <flux:label>Answer Type</flux:label>
                         <flux:select wire:model.live="briefFields.{{ $index }}.type">
-                            <option value="text">Text</option>
-                            <option value="textarea">Textarea</option>
-                            <option value="number">Number</option>
-                            <option value="date">Date</option>
+                            @foreach($resolvedFieldTypeOptions as $type)
+                                <option value="{{ $type['value'] }}">{{ $type['label'] }}</option>
+                            @endforeach
                         </flux:select>
                     </flux:field>
 
@@ -36,6 +49,15 @@
                         <flux:button icon="trash" size="sm" type="button" variant="danger" wire:click="removeBriefField({{ $index }})"></flux:button>
                     </div>
                 </div>
+
+                @if((bool) data_get($fieldTypeMeta, $briefType.'.requires_options', false))
+                    <div class="mt-3">
+                        <flux:field>
+                            <flux:label>Select Options (comma separated)</flux:label>
+                            <flux:input wire:model.blur="briefFieldOptionsInput.{{ $index }}" placeholder="Sales, Awareness, App Installs" />
+                        </flux:field>
+                    </div>
+                @endif
 
                 <div class="mt-3">
                     <flux:field>

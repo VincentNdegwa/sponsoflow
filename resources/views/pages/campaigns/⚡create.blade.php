@@ -3,6 +3,7 @@
 use App\Models\Campaign;
 use App\Models\CampaignTemplate;
 use App\Models\DeliverableOption;
+use App\Support\CampaignFieldTypeRegistry;
 use App\Services\CampaignService;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -16,6 +17,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
     public bool $isPublic = false;
 
     public array $briefFields = [];
+    public array $briefFieldOptionsInput = [];
     public array $contentBrief = [];
     public array $deliverables = [];
 
@@ -55,6 +57,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
 
         if ($schemaFields !== []) {
             $this->briefFields = [];
+            $this->briefFieldOptionsInput = [];
             $this->contentBrief = [];
 
             foreach ($schemaFields as $field) {
@@ -71,8 +74,9 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
                     'label' => (string) data_get($field, 'label', $name),
                     'type' => (string) data_get($field, 'type', 'text'),
                     'options' => $options,
-                    'options_text' => implode(', ', $options),
                 ];
+
+                $this->briefFieldOptionsInput[] = implode(', ', $options);
 
                 $this->contentBrief[$name] = (string) data_get($existingCampaign->content_brief, $name, '');
             }
@@ -137,6 +141,16 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
         return $this->availableTemplates->first(fn (CampaignTemplate $template) => (int) $template->id === (int) $this->templateId);
     }
 
+    public function fieldTypeOptions(): array
+    {
+        return CampaignFieldTypeRegistry::selectOptions();
+    }
+
+    public function fieldTypeRequiresOptions(string $type): bool
+    {
+        return CampaignFieldTypeRegistry::requiresOptions($type);
+    }
+
     #[Computed]
     public function totalBudget(): float
     {
@@ -152,6 +166,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
         $template = $this->selectedTemplate;
 
         $this->briefFields = [];
+        $this->briefFieldOptionsInput = [];
         $this->contentBrief = [];
         $this->deliverables = [];
 
@@ -175,8 +190,9 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
                         'label' => (string) data_get($field, 'label', $name),
                         'type' => (string) data_get($field, 'type', 'text'),
                         'options' => $options,
-                        'options_text' => implode(', ', $options),
                     ];
+
+                    $this->briefFieldOptionsInput[] = implode(', ', $options);
 
                     $this->contentBrief[$normalizedKey] = '';
                 }
@@ -227,8 +243,9 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
             'label' => $label,
             'type' => (string) data_get($defaults, 'type', 'text'),
             'options' => $options,
-            'options_text' => implode(', ', $options),
         ];
+
+        $this->briefFieldOptionsInput[] = implode(', ', $options);
 
         $this->contentBrief[$generatedKey] = $this->contentBrief[$generatedKey] ?? '';
     }
@@ -243,6 +260,8 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
 
         unset($this->briefFields[$index]);
         $this->briefFields = array_values($this->briefFields);
+        unset($this->briefFieldOptionsInput[$index]);
+        $this->briefFieldOptionsInput = array_values($this->briefFieldOptionsInput);
 
         if ($fieldKey !== '' && array_key_exists($fieldKey, $this->contentBrief)) {
             unset($this->contentBrief[$fieldKey]);
@@ -315,10 +334,26 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
             return;
         }
 
-        if ($attribute === 'options_text') {
-            $rawOptions = (string) ($this->briefFields[$index]['options_text'] ?? '');
-            $this->briefFields[$index]['options'] = array_values(array_filter(array_map('trim', explode(',', $rawOptions))));
+        if ($attribute === 'type' && ! $this->fieldTypeRequiresOptions((string) ($this->briefFields[$index]['type'] ?? ''))) {
+            $this->briefFieldOptionsInput[$index] = '';
+            $this->briefFields[$index]['options'] = [];
         }
+    }
+
+    public function updatedBriefFieldOptionsInput(mixed $value, ?string $path = null): void
+    {
+        if (! is_string($path) || $path === '') {
+            return;
+        }
+
+        $parts = explode('.', $path);
+        $index = (int) ($parts[1] ?? -1);
+
+        if (! isset($this->briefFields[$index])) {
+            return;
+        }
+
+        $this->briefFields[$index]['options'] = $this->parseOptionsInput((string) $value);
     }
 
     public function removeDeliverable(int $index): void
@@ -333,13 +368,17 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
 
     public function submit(): void
     {
+        $this->syncBriefFieldOptions();
+
         $this->validate([
             'templateId' => 'nullable|integer|exists:campaign_templates,id',
             'title' => 'required|string|min:3|max:150',
             'briefFields' => 'required|array|min:1',
             'briefFields.*.key' => 'required|string|min:2|max:120|regex:/^[a-zA-Z_][a-zA-Z0-9_]*$/',
             'briefFields.*.label' => 'required|string|min:2|max:120',
-            'briefFields.*.type' => 'required|string|in:text,textarea,select,number,date',
+            'briefFields.*.type' => 'required|string|'.CampaignFieldTypeRegistry::validationRule(),
+            'briefFields.*.options' => 'nullable|array',
+            'briefFields.*.options.*' => 'string|max:120',
             'deliverables' => 'required|array|min:1',
             'deliverables.*.deliverable_option_id' => 'required|integer|exists:deliverable_options,id',
             'deliverables.*.type_slug' => 'required|string|max:120',
@@ -384,7 +423,9 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
                         'name' => (string) $field['key'],
                         'type' => (string) $field['type'],
                         'label' => (string) $field['label'],
-                        'options' => $field['type'] === 'select' ? array_values((array) ($field['options'] ?? [])) : [],
+                        'options' => $this->fieldTypeRequiresOptions((string) $field['type'])
+                            ? array_values((array) ($field['options'] ?? []))
+                            : [],
                     ])->values()->all(),
                 ],
             ],
@@ -541,6 +582,24 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
         ];
     }
 
+    private function syncBriefFieldOptions(): void
+    {
+        foreach ($this->briefFields as $index => $field) {
+            if (! $this->fieldTypeRequiresOptions((string) data_get($field, 'type', 'text'))) {
+                $this->briefFields[$index]['options'] = [];
+
+                continue;
+            }
+
+            $this->briefFields[$index]['options'] = $this->parseOptionsInput((string) data_get($this->briefFieldOptionsInput, $index, ''));
+        }
+    }
+
+    private function parseOptionsInput(string $value): array
+    {
+        return array_values(array_filter(array_map('trim', explode(',', $value)), fn (string $option): bool => $option !== ''));
+    }
+
     private function normalizeFieldKey(string $key): string
     {
         $normalized = strtolower(trim($key));
@@ -637,7 +696,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
             </div>
         </section>
 
-        @include('components.campaigns.brief-builder')
+        @include('components.campaigns.brief-builder', ['fieldTypeOptions' => $this->fieldTypeOptions()])
 
         <section class="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
             <div class="mb-4 flex items-center justify-between gap-3">

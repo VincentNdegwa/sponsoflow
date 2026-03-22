@@ -218,9 +218,7 @@ new #[Layout('layouts::app'), Title('Campaign Categories')] class extends Compon
                 You have not added a category yet.
             </div>
 
-            <div class="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
-                Copy a starter category below to get going quickly.
-            </div>
+    
         @endif
 
         <flux:heading size="lg" class="mb-4">Starter Library</flux:heading>
