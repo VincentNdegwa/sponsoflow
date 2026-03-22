@@ -26,6 +26,12 @@
                         {{ __('Products') }}
                     </flux:sidebar.item>
                 @endif
+                @if (isset($currentWorkspace) && $currentWorkspace->isBrand())
+                    <flux:sidebar.item icon="flag" :href="route('campaigns.index')"
+                        :current="request()->routeIs('campaigns.*')" wire:navigate>
+                        {{ __('Campaigns') }}
+                    </flux:sidebar.item>
+                @endif
                 <flux:sidebar.item icon="calendar-days" :href="route('bookings.index')"
                     :current="request()->routeIs('bookings.*')" wire:navigate>
                     {{ __('Bookings') }}

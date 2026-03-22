@@ -82,6 +82,26 @@ class Workspace extends Model
         return $this->hasMany(WorkspaceRating::class);
     }
 
+    public function categories(): HasMany
+    {
+        return $this->hasMany(Category::class);
+    }
+
+    public function campaignTemplates(): HasMany
+    {
+        return $this->hasMany(CampaignTemplate::class);
+    }
+
+    public function campaigns(): HasMany
+    {
+        return $this->hasMany(Campaign::class);
+    }
+
+    public function deliverableOptions(): HasMany
+    {
+        return $this->hasMany(DeliverableOption::class);
+    }
+
     public function canReceivePayments(string $provider = 'stripe'): bool
     {
         return $this->activePaymentConfiguration($provider)?->canReceivePayments() ?? false;

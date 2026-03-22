@@ -13,13 +13,13 @@ class ProductFactory extends Factory
             'Instagram Story',
             'Instagram Post',
             'Instagram Reel',
-            'TikTok Video', 
+            'TikTok Video',
             'YouTube Short',
             'Product Review',
             'Unboxing Video',
             'Tutorial Video',
             'Brand Mention',
-            'Sponsored Post'
+            'Sponsored Post',
         ];
 
         return [
@@ -34,6 +34,20 @@ class ProductFactory extends Factory
                 'revisions_included' => fake()->numberBetween(1, 3),
                 'platforms' => fake()->randomElements(['Instagram', 'TikTok', 'YouTube', 'Twitter', 'Facebook'], fake()->numberBetween(1, 3)),
                 'hashtags_required' => fake()->numberBetween(3, 10),
+            ],
+            'default_deliverables' => [
+                [
+                    'type_slug' => 'ig_reel',
+                    'label' => 'Instagram Reel',
+                    'qty' => 1,
+                    'unit_price' => fake()->randomFloat(2, 80, 300),
+                ],
+                [
+                    'type_slug' => 'ig_story',
+                    'label' => 'Instagram Story',
+                    'qty' => 2,
+                    'unit_price' => fake()->randomFloat(2, 25, 120),
+                ],
             ],
             'is_active' => fake()->boolean(90),
         ];

@@ -19,6 +19,7 @@ class Product extends Model
         'base_price',
         'duration_minutes',
         'custom_attributes',
+        'default_deliverables',
         'is_active',
         'is_public',
         'featured_order',
@@ -30,6 +31,7 @@ class Product extends Model
         return [
             'base_price' => 'decimal:2',
             'custom_attributes' => 'array',
+            'default_deliverables' => 'array',
             'is_active' => 'boolean',
             'is_public' => 'boolean',
         ];
