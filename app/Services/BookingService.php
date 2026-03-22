@@ -705,15 +705,21 @@ class BookingService
         $creatorWorkspace = Workspace::findOrFail($data['creator_workspace_id']);
         $creator = $creatorWorkspace->owner;
 
+        $requirementData = is_array($data['requirement_data'] ?? null)
+            ? $data['requirement_data']
+            : [
+                'budget' => $data['budget'] ?? null,
+                'campaign_goals' => $data['campaign_goals'] ?? null,
+                'pitch' => $data['pitch'] ?? null,
+            ];
+
         return $this->createInquiry([
             'creator' => $creator,
             'workspace' => $creatorWorkspace,
             'product_id' => $data['product_id'],
-            'requirement_data' => [
-                'budget' => $data['budget'],
-                'campaign_goals' => $data['campaign_goals'],
-                'pitch' => $data['pitch'],
-            ],
+            'requirement_data' => $requirementData,
+            'campaign_mode' => $data['campaign_mode'] ?? 'new',
+            'campaign_id' => $data['campaign_id'] ?? null,
             'brand_user_id' => $data['brand_user_id'],
             'brand_workspace_id' => $data['brand_workspace_id'],
         ]);

@@ -4,10 +4,13 @@ use App\Enums\BookingStatus;
 use App\Enums\BookingType;
 use App\Enums\SlotStatus;
 use App\Models\Booking;
+use App\Models\Campaign;
 use App\Models\Product;
 use App\Models\Slot;
 use App\Models\Workspace;
 use App\Services\BookingService;
+use App\Services\CampaignService;
+use App\Support\InquiryCampaignSkeleton;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -83,9 +86,16 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
     public string $bookingMode = ''; // 'slot' | 'inquiry'
     public ?int $selectedSlotId = null;
     public array $requirementData = [];
-    public string $inquiryBudget = '';
-    public string $campaignGoals = '';
-    public string $pitch = '';
+    public string $campaignSelectionMode = 'new';
+    public ?int $selectedCampaignId = null;
+    public array $guestData = [
+        'budget' => '',
+        'campaign_name' => '',
+        'main_goal' => '',
+        'pitch' => '',
+        'product_service_link' => '',
+        'mandatory_mention' => '',
+    ];
 
     #[Computed]
     public function isCreator(): bool
@@ -225,6 +235,16 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
         $this->bookingMode = '';
         $this->selectedSlotId = null;
         $this->requirementData = [];
+        $this->campaignSelectionMode = 'new';
+        $this->selectedCampaignId = null;
+        $this->guestData = [
+            'budget' => '',
+            'campaign_name' => '',
+            'main_goal' => '',
+            'pitch' => '',
+            'product_service_link' => '',
+            'mandatory_mention' => '',
+        ];
         unset($this->brandCreatorProducts, $this->selectedBrandProduct, $this->availableSlots, $this->selectedCreatorWorkspace, $this->creatorCurrencySymbol, $this->creatorCurrencyCode);
 
         if ($this->selectedCreatorWorkspaceId) {
@@ -244,7 +264,31 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
         $this->bookingMode = '';
         $this->selectedSlotId = null;
         $this->requirementData = [];
+        $this->campaignSelectionMode = 'new';
+        $this->selectedCampaignId = null;
+        $this->guestData = [
+            'budget' => '',
+            'campaign_name' => '',
+            'main_goal' => '',
+            'pitch' => '',
+            'product_service_link' => '',
+            'mandatory_mention' => '',
+        ];
         unset($this->selectedBrandProduct, $this->availableSlots);
+    }
+
+    public function updatedCampaignSelectionMode(string $value): void
+    {
+        if (! $this->hasBrandCampaignOptions()) {
+            $this->campaignSelectionMode = 'new';
+            $this->selectedCampaignId = null;
+
+            return;
+        }
+
+        if ($value !== 'existing') {
+            $this->selectedCampaignId = null;
+        }
     }
 
     public function updatedCreatorProductId(): void
@@ -305,6 +349,11 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                 'brandProductId' => 'required|integer',
                 'bookingMode' => 'required|in:slot,inquiry',
             ]);
+
+            if ($this->bookingMode === 'inquiry') {
+                $this->initializeInquirySkeleton();
+            }
+
             $this->step = 3;
         }
     }
@@ -419,20 +468,53 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
 
     public function submitInquiry(): void
     {
-        $this->validate([
-            'inquiryBudget' => 'required|numeric|min:1',
-            'campaignGoals' => 'required|string',
-            'pitch' => 'required|string',
-        ]);
+        if (! $this->hasBrandCampaignOptions()) {
+            $this->campaignSelectionMode = 'new';
+            $this->selectedCampaignId = null;
+        }
+
+        $requiresInquirySkeleton = ! $this->usingExistingCampaignForInquiry();
+
+        $validation = [
+            'campaignSelectionMode' => 'required|in:new,existing',
+        ];
+
+        if ($this->campaignSelectionMode === 'existing') {
+            $validation['selectedCampaignId'] = 'required|integer|min:1';
+        }
+
+        if ($requiresInquirySkeleton) {
+            $validation['guestData.budget'] = 'required|numeric|min:1';
+            $validation['guestData.campaign_name'] = 'required|string|max:255';
+            $validation['guestData.main_goal'] = 'required|in:awareness,sales,content_creation';
+            $validation['guestData.pitch'] = 'required|string';
+            $validation['guestData.product_service_link'] = 'required|url|max:500';
+            $validation['guestData.mandatory_mention'] = 'nullable|string|max:255';
+        }
+
+        $this->validate($validation);
+
+        $requirementData = [];
+
+        if ($requiresInquirySkeleton) {
+            $requirementData = [
+                'budget' => $this->guestData['budget'],
+                'campaign_name' => $this->guestData['campaign_name'],
+                'main_goal' => $this->guestData['main_goal'],
+                'pitch' => $this->guestData['pitch'],
+                'product_service_link' => $this->guestData['product_service_link'],
+                'mandatory_mention' => $this->guestData['mandatory_mention'],
+            ];
+        }
 
         $workspace = currentWorkspace();
 
         $result = app(BookingService::class)->createBrandInquiry([
             'creator_workspace_id' => $this->selectedCreatorWorkspaceId,
             'product_id' => $this->brandProductId,
-            'budget' => (float) $this->inquiryBudget,
-            'campaign_goals' => $this->campaignGoals,
-            'pitch' => $this->pitch,
+            'campaign_mode' => $this->campaignSelectionMode,
+            'campaign_id' => $this->campaignSelectionMode === 'existing' ? $this->selectedCampaignId : null,
+            'requirement_data' => $requirementData,
             'brand_user_id' => Auth::id(),
             'brand_workspace_id' => $workspace->id,
         ]);
@@ -443,6 +525,65 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
         } else {
             $this->dispatch('error', $result['error']);
         }
+    }
+
+    private function initializeInquirySkeleton(): void
+    {
+        $product = $this->selectedBrandProduct;
+
+        if (! $product) {
+            return;
+        }
+
+        if ($this->guestData['campaign_name'] === '') {
+            $creatorName = (string) ($this->selectedCreatorWorkspace?->owner?->name ?? $this->selectedCreatorWorkspace?->name ?? 'creator');
+            $this->guestData['campaign_name'] = InquiryCampaignSkeleton::defaultCampaignName($creatorName);
+        }
+
+        $this->guestData['budget'] = (string) ((float) $product->base_price);
+
+        if ($this->campaignSelectionMode === 'existing' && ! $this->hasBrandCampaignOptions()) {
+            $this->campaignSelectionMode = 'new';
+            $this->selectedCampaignId = null;
+        }
+    }
+
+    #[Computed]
+    public function inquirySkeletonSchema(): array
+    {
+        return InquiryCampaignSkeleton::uiSchema();
+    }
+
+    #[Computed]
+    public function brandCampaignOptions()
+    {
+        if (! $this->isBrand) {
+            return collect();
+        }
+
+        return app(CampaignService::class)->visibleForWorkspace(currentWorkspace());
+    }
+
+    #[Computed]
+    public function hasBrandCampaignOptions(): bool
+    {
+        return $this->brandCampaignOptions()->isNotEmpty();
+    }
+
+    #[Computed]
+    public function usingExistingCampaignForInquiry(): bool
+    {
+        return $this->hasBrandCampaignOptions() && $this->campaignSelectionMode === 'existing';
+    }
+
+    #[Computed]
+    public function selectedBrandCampaign(): ?Campaign
+    {
+        if (! $this->usingExistingCampaignForInquiry() || ! $this->selectedCampaignId) {
+            return null;
+        }
+
+        return $this->brandCampaignOptions()->firstWhere('id', (int) $this->selectedCampaignId);
     }
 }; ?>
 
@@ -784,14 +925,14 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                                 <div class="mt-2 grid gap-3 sm:grid-cols-2">
                                     <label class="flex cursor-pointer flex-col gap-1 rounded-lg border p-4 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/60 {{ $bookingMode === 'slot' ? 'border-accent bg-accent/5' : 'border-zinc-200 dark:border-zinc-700' }}">
                                         <div class="flex items-center gap-2">
-                                            <input type="radio" wire:model.live="bookingMode" value="slot" class="accent-[var(--color-accent)]" />
+                                            <input type="radio" wire:model.live="bookingMode" value="slot" class="accent-(--color-accent)" />
                                             <span class="font-medium">Instant Booking</span>
                                         </div>
                                         <p class="pl-5 text-xs text-zinc-500">Pick a slot, fill requirements, and pay right away.</p>
                                     </label>
                                     <label class="flex cursor-pointer flex-col gap-1 rounded-lg border p-4 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/60 {{ $bookingMode === 'inquiry' ? 'border-accent bg-accent/5' : 'border-zinc-200 dark:border-zinc-700' }}">
                                         <div class="flex items-center gap-2">
-                                            <input type="radio" wire:model.live="bookingMode" value="inquiry" class="accent-[var(--color-accent)]" />
+                                            <input type="radio" wire:model.live="bookingMode" value="inquiry" class="accent-(--color-accent)" />
                                             <span class="font-medium">Custom Inquiry</span>
                                         </div>
                                         <p class="pl-5 text-xs text-zinc-500">Propose your budget and goals. Creator approves first.</p>
@@ -824,7 +965,7 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                         <div class="mb-6 space-y-2">
                             @foreach($this->availableSlots as $slot)
                                 <label class="flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/60 {{ $selectedSlotId == $slot->id ? 'border-accent bg-accent/5' : 'border-zinc-200 dark:border-zinc-700' }}">
-                                    <input type="radio" wire:model.live="selectedSlotId" value="{{ $slot->id }}" class="accent-[var(--color-accent)]" />
+                                    <input type="radio" wire:model.live="selectedSlotId" value="{{ $slot->id }}" class="accent-(--color-accent)" />
                                     <div class="flex flex-1 items-center justify-between">
                                         <div>
                                             <p class="font-medium">{{ formatWorkspaceDate($slot->slot_date) }}</p>
@@ -868,34 +1009,180 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                     <flux:text class="mb-6 text-zinc-500">Tell the creator about your campaign. They'll review and approve before you proceed to payment.</flux:text>
 
                     <div class="space-y-5">
-                        <flux:field>
-                            <flux:label>Your budget *</flux:label>
-                            <flux:input
-                                wire:model="inquiryBudget"
-                                type="number"
-                                min="1"
-                                step="0.01"
-                                placeholder="500.00"
-                                prefix="{{ $this->creatorCurrencySymbol }}"
-                            />
-                            <flux:description>
-                                Amount in <strong>{{ $this->creatorCurrencyCode }}</strong> — the creator's currency.
-                            </flux:description>
-                            <flux:error name="inquiryBudget" />
-                        </flux:field>
+                        @if ($this->hasBrandCampaignOptions)
+                            <flux:field>
+                                <flux:label>Save inquiry to</flux:label>
+                                <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                                    <label @class([
+                                        'flex cursor-pointer flex-col gap-1 rounded-lg border p-4 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/60',
+                                        'border-accent bg-accent/5' => $campaignSelectionMode === 'new',
+                                        'border-zinc-200 dark:border-zinc-700' => $campaignSelectionMode !== 'new',
+                                    ])>
+                                        <div class="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                wire:model.live="campaignSelectionMode"
+                                                value="new"
+                                                class="accent-(--color-accent)"
+                                            />
+                                            <span class="font-medium">New Campaign</span>
+                                        </div>
+                                        <p class="pl-5 text-xs text-zinc-500">Create a new private campaign for this inquiry.</p>
+                                    </label>
 
-                        <flux:field>
-                            <flux:label>Campaign goals *</flux:label>
-                            <flux:textarea wire:model="campaignGoals" rows="3" placeholder="e.g. Increase brand awareness for our new product launch targeting 18-30 year olds…" />
-                            <flux:error name="campaignGoals" />
-                        </flux:field>
+                                    <label @class([
+                                        'flex cursor-pointer flex-col gap-1 rounded-lg border p-4 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/60',
+                                        'border-accent bg-accent/5' => $campaignSelectionMode === 'existing',
+                                        'border-zinc-200 dark:border-zinc-700' => $campaignSelectionMode !== 'existing',
+                                    ])>
+                                        <div class="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                wire:model.live="campaignSelectionMode"
+                                                value="existing"
+                                                class="accent-(--color-accent)"
+                                            />
+                                            <span class="font-medium">Existing Campaign</span>
+                                        </div>
+                                        <p class="pl-5 text-xs text-zinc-500">Attach this inquiry to one of your existing campaigns.</p>
+                                    </label>
+                                </div>
+                                <flux:error name="campaignSelectionMode" />
+                            </flux:field>
 
-                        <flux:field>
-                            <flux:label>Your pitch *</flux:label>
-                            <flux:textarea wire:model="pitch" rows="4" placeholder="e.g. Hi! We're launching our new eco-friendly water bottle and think your audience would love it. We'd love you to create an authentic unboxing video…" />
-                            <flux:description>Tell the creator why you want to work with them and what makes your campaign special.</flux:description>
-                            <flux:error name="pitch" />
-                        </flux:field>
+                            @if ($campaignSelectionMode === 'existing')
+                                <flux:field>
+                                    <flux:label>Select campaign</flux:label>
+                                    <flux:select wire:model.live="selectedCampaignId">
+                                        <option value="">Select your campaign</option>
+                                        @foreach ($this->brandCampaignOptions as $campaign)
+                                            <option value="{{ $campaign->id }}">
+                                                {{ $campaign->title }} • {{ $campaign->status->label() }} • {{ $campaign->is_public ? 'Public' : 'Private' }}
+                                            </option>
+                                        @endforeach
+                                    </flux:select>
+                                    <flux:error name="selectedCampaignId" />
+                                </flux:field>
+                            @endif
+                        @endif
+
+                        @if (! $this->usingExistingCampaignForInquiry)
+                            @foreach ($this->inquirySkeletonSchema['metadata'] as $metaField)
+                                <flux:field wire:key="booking-inquiry-meta-{{ $metaField['key'] }}">
+                                    <flux:label>
+                                        {{ $metaField['label'] }}
+                                        @if ($metaField['required'])
+                                            *
+                                        @endif
+                                    </flux:label>
+
+                                    <flux:input
+                                        wire:model="guestData.{{ $metaField['key'] }}"
+                                        type="{{ $metaField['type'] === 'number' ? 'number' : 'text' }}"
+                                        :readonly="(bool) ($metaField['readonly'] ?? false)"
+                                        :step="$metaField['type'] === 'number' ? '0.01' : null"
+                                        :prefix="$metaField['key'] === 'budget' ? $this->creatorCurrencySymbol : null"
+                                    />
+
+                                    <flux:description>{{ $metaField['help'] }}</flux:description>
+                                    <flux:error name="guestData.{{ $metaField['key'] }}" />
+                                </flux:field>
+                            @endforeach
+
+                            @foreach ($this->inquirySkeletonSchema['sections'] as $section)
+                                <flux:heading size="sm" class="mb-4">{{ $section['title'] }}</flux:heading>
+
+                                <div class="space-y-4">
+                                    @foreach ($section['fields'] as $field)
+                                        <flux:field wire:key="booking-inquiry-field-{{ $field['key'] }}">
+                                            <flux:label>
+                                                {{ $field['label'] }}
+                                                @if ($field['required'])
+                                                    *
+                                                @endif
+                                            </flux:label>
+
+                                            @if ($field['type'] === 'textarea')
+                                                <flux:textarea
+                                                    wire:model="guestData.{{ $field['key'] }}"
+                                                    rows="4"
+                                                    placeholder="{{ $field['placeholder'] ?? '' }}"
+                                                />
+                                            @elseif ($field['type'] === 'select')
+                                                <flux:select wire:model="guestData.{{ $field['key'] }}">
+                                                    <option value="">Select an option</option>
+                                                    @foreach (($field['options'] ?? []) as $option)
+                                                        <option value="{{ $option['value'] }}">{{ $option['label'] }}</option>
+                                                    @endforeach
+                                                </flux:select>
+                                            @else
+                                                <flux:input
+                                                    wire:model="guestData.{{ $field['key'] }}"
+                                                    type="{{ $field['key'] === 'product_service_link' ? 'url' : 'text' }}"
+                                                    placeholder="{{ $field['placeholder'] ?? '' }}"
+                                                />
+                                            @endif
+
+                                            <flux:error name="guestData.{{ $field['key'] }}" />
+                                        </flux:field>
+                                    @endforeach
+                                </div>
+                            @endforeach
+                        @else
+                            <div class="rounded-lg border border-zinc-200 bg-zinc-50/70 p-4 space-y-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+                                @if ($this->selectedBrandCampaign)
+                                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        <div class="rounded-md border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                                            <flux:text size="xs" class="text-zinc-500">Campaign</flux:text>
+                                            <flux:text class="font-medium">{{ $this->selectedBrandCampaign->title }}</flux:text>
+                                        </div>
+                                        <div class="rounded-md border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                                            <flux:text size="xs" class="text-zinc-500">Budget</flux:text>
+                                            <flux:text class="font-medium">{{ formatMoney((float) $this->selectedBrandCampaign->total_budget, currentWorkspace()) }}</flux:text>
+                                        </div>
+                                        <div class="rounded-md border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                                            <flux:text size="xs" class="text-zinc-500">Status</flux:text>
+                                            <flux:text class="font-medium">{{ $this->selectedBrandCampaign->status->label() }}</flux:text>
+                                        </div>
+                                        <div class="rounded-md border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                                            <flux:text size="xs" class="text-zinc-500">Visibility</flux:text>
+                                            <flux:text class="font-medium">{{ $this->selectedBrandCampaign->is_public ? 'Public' : 'Private' }}</flux:text>
+                                        </div>
+                                    </div>
+
+                                    @php
+                                        $campaignBrief = is_array($this->selectedBrandCampaign->content_brief)
+                                            ? $this->selectedBrandCampaign->content_brief
+                                            : [];
+                                        $campaignSchema = data_get($campaignBrief, '_form_schema.sections', []);
+                                    @endphp
+
+                                    @if (! empty($campaignSchema))
+                                        <div class="space-y-4">
+                                            @foreach ($campaignSchema as $section)
+                                                <div class="rounded-md border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                                                    <flux:text class="mb-2 font-semibold">{{ data_get($section, 'title', 'Campaign Section') }}</flux:text>
+                                                    <div class="space-y-2">
+                                                        @foreach ((array) data_get($section, 'fields', []) as $field)
+                                                            @php
+                                                                $fieldName = data_get($field, 'name');
+                                                                $value = $fieldName ? data_get($campaignBrief, $fieldName) : null;
+                                                            @endphp
+                                                            <div>
+                                                                <flux:text size="xs" class="text-zinc-500">{{ data_get($field, 'label', 'Field') }}</flux:text>
+                                                                <flux:text>{{ filled($value) ? (is_array($value) ? implode(', ', $value) : $value) : 'Not set' }}</flux:text>
+                                                            </div>
+                                                        @endforeach
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                @else
+                                    <flux:text size="sm" class="text-zinc-500">Select a campaign to view a preview.</flux:text>
+                                @endif
+                            </div>
+                        @endif
                     </div>
 
                     <div class="mt-6 flex gap-3">
