@@ -97,6 +97,16 @@ class Workspace extends Model
         return $this->hasMany(Campaign::class);
     }
 
+    public function campaignApplications(): HasMany
+    {
+        return $this->hasMany(CampaignApplication::class, 'creator_workspace_id');
+    }
+
+    public function campaignSlots(): HasMany
+    {
+        return $this->hasMany(CampaignSlot::class, 'creator_workspace_id');
+    }
+
     public function deliverableOptions(): HasMany
     {
         return $this->hasMany(DeliverableOption::class);

@@ -6,6 +6,7 @@ use App\Enums\CampaignStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Campaign extends Model
 {
@@ -42,5 +43,15 @@ class Campaign extends Model
     public function template(): BelongsTo
     {
         return $this->belongsTo(CampaignTemplate::class, 'template_id');
+    }
+
+    public function applications(): HasMany
+    {
+        return $this->hasMany(CampaignApplication::class);
+    }
+
+    public function slots(): HasMany
+    {
+        return $this->hasMany(CampaignSlot::class);
     }
 }

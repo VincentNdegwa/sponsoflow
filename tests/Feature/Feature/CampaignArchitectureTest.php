@@ -1,10 +1,13 @@
 <?php
 
+use App\Enums\CampaignApplicationStatus;
+use App\Enums\CampaignSlotStatus;
 use App\Enums\CampaignStatus;
 use App\Models\Campaign;
 use App\Models\CampaignTemplate;
 use App\Models\Category;
 use App\Models\DeliverableOption;
+use App\Models\Product;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\CampaignService;
@@ -97,11 +100,110 @@ test('campaign service creates private campaign with normalized deliverables and
 
     $campaign = Campaign::query()->findOrFail($campaign->id);
 
-    expect($campaign->status)->toBe(CampaignStatus::Pending)
+    expect($campaign->status)->toBe(CampaignStatus::Draft)
         ->and($campaign->is_public)->toBeFalse()
         ->and((float) $campaign->total_budget)->toBe(9500.00)
         ->and(count($campaign->deliverables))->toBe(2)
         ->and((float) $campaign->deliverables[1]['subtotal'])->toBe(4500.0)
         ->and($campaign->deliverables[0]['deliverable_option_id'])->toBe($reelOption->id)
         ->and($campaign->content_brief['goals'])->toBe('Awareness');
+});
+
+test('campaign application and slot support marketplace and inquiry execution records', function () {
+    $brandOwner = User::factory()->create();
+    $creatorOwner = User::factory()->create();
+
+    $brandWorkspace = Workspace::factory()->brand()->create(['owner_id' => $brandOwner->id]);
+    $creatorWorkspace = Workspace::factory()->creator()->create(['owner_id' => $creatorOwner->id]);
+
+    $deliverableOption = DeliverableOption::query()->create([
+        'workspace_id' => null,
+        'name' => 'Placeholder',
+        'slug' => 'placeholder-option',
+    ]);
+
+    $creatorProduct = Product::factory()->create([
+        'workspace_id' => $creatorWorkspace->id,
+        'name' => 'UGC Starter Package',
+        'base_price' => 2500,
+    ]);
+
+    app()->instance('current.workspace', $brandWorkspace);
+
+    $campaign = app(CampaignService::class)->createCampaign(
+        template: null,
+        contentBrief: ['pitch' => 'Need summer launch assets.'],
+        deliverables: [[
+            'deliverable_option_id' => $deliverableOption->id,
+            'type_slug' => 'placeholder-option',
+            'label' => 'Placeholder',
+            'qty' => 1,
+            'unit_price' => 2500,
+        ]],
+        title: 'Summer Launch',
+        isPublic: true,
+        status: CampaignStatus::Published,
+    );
+
+    $service = app(CampaignService::class);
+
+    $application = $service->submitApplication(
+        campaign: $campaign,
+        creatorWorkspace: $creatorWorkspace,
+        product: $creatorProduct,
+    );
+
+    $slot = $service->approveApplication(application: $application);
+
+    expect($campaign->applications()->count())->toBe(1)
+        ->and($campaign->slots()->count())->toBe(1)
+        ->and($application->refresh()->status)->toBe(CampaignApplicationStatus::Approved)
+        ->and($slot->status)->toBe(CampaignSlotStatus::Pending)
+        ->and($slot->application?->id)->toBe($application->id);
+});
+
+test('campaign service creates private inquiry campaign and execution slot without application', function () {
+    $brandOwner = User::factory()->create();
+    $creatorOwner = User::factory()->create();
+
+    $brandWorkspace = Workspace::factory()->brand()->create(['owner_id' => $brandOwner->id]);
+    $creatorWorkspace = Workspace::factory()->creator()->create(['owner_id' => $creatorOwner->id]);
+
+    $deliverableOption = DeliverableOption::query()->create([
+        'workspace_id' => null,
+        'name' => 'Short Video',
+        'slug' => 'short-video',
+    ]);
+
+    $creatorProduct = Product::factory()->create([
+        'workspace_id' => $creatorWorkspace->id,
+        'name' => 'UGC Video Bundle',
+        'base_price' => 4200,
+    ]);
+
+    app()->instance('current.workspace', $brandWorkspace);
+
+    $slot = app(CampaignService::class)->createInquiryCampaignSlot(
+        creatorWorkspace: $creatorWorkspace,
+        product: $creatorProduct,
+        contentBrief: ['goal' => 'Acquire 100 trial signups.'],
+        deliverables: [[
+            'deliverable_option_id' => $deliverableOption->id,
+            'type_slug' => 'short-video',
+            'label' => 'Short Video',
+            'qty' => 2,
+            'unit_price' => 2100,
+        ]],
+        title: 'Private Creator Inquiry',
+    );
+
+    $campaign = $slot->campaign()->firstOrFail();
+
+    expect($slot->application_id)->toBeNull()
+        ->and($slot->status)->toBe(CampaignSlotStatus::Pending)
+        ->and((float) $slot->subtotal)->toBe(4200.0)
+        ->and($campaign->is_public)->toBeFalse()
+        ->and($campaign->status)->toBe(CampaignStatus::Draft)
+        ->and($campaign->slots()->count())->toBe(1)
+        ->and($campaign->applications()->count())->toBe(0);
 });

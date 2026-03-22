@@ -135,9 +135,9 @@ new #[Layout('layouts::app'), Title('Campaigns')] class extends Component {
         <flux:select wire:model.live="statusFilter">
             <option value="">All Statuses</option>
             <option value="draft">Draft</option>
-            <option value="pending">Pending</option>
-            <option value="active">Active</option>
-            <option value="completed">Completed</option>
+            <option value="published">Published</option>
+            <option value="paused">Paused</option>
+            <option value="closed">Closed</option>
         </flux:select>
 
         <flux:select wire:model.live="visibilityFilter">

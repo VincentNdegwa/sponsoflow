@@ -2,11 +2,18 @@
 
 namespace App\Services;
 
+use App\Enums\CampaignApplicationStatus;
+use App\Enums\CampaignSlotStatus;
 use App\Enums\CampaignStatus;
 use App\Models\Campaign;
+use App\Models\CampaignApplication;
+use App\Models\CampaignSlot;
 use App\Models\CampaignTemplate;
+use App\Models\Product;
+use App\Models\Workspace;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class CampaignService
 {
@@ -16,7 +23,7 @@ class CampaignService
         array $deliverables,
         ?string $title = null,
         bool $isPublic = false,
-        CampaignStatus $status = CampaignStatus::Pending,
+        CampaignStatus $status = CampaignStatus::Draft,
     ): Campaign {
         $brandWorkspace = currentWorkspace();
 
@@ -73,6 +80,138 @@ class CampaignService
             ]);
 
             return $campaign->refresh();
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $notes
+     */
+    public function submitApplication(
+        Campaign $campaign,
+        Workspace $creatorWorkspace,
+        Product $product,
+        ?array $notes = null,
+    ): CampaignApplication {
+        if (! $creatorWorkspace->isCreator()) {
+            throw new InvalidArgumentException('Only creator workspaces can apply to campaigns.');
+        }
+
+        if ((int) $product->workspace_id !== (int) $creatorWorkspace->id) {
+            throw new InvalidArgumentException('Creators can only apply using their own products.');
+        }
+
+        if (! $campaign->is_public || ! $campaign->status->canAcceptApplications()) {
+            throw new InvalidArgumentException('This campaign is not currently accepting applications.');
+        }
+
+        return DB::transaction(function () use ($campaign, $creatorWorkspace, $product, $notes) {
+            return CampaignApplication::query()->updateOrCreate(
+                [
+                    'campaign_id' => $campaign->id,
+                    'creator_workspace_id' => $creatorWorkspace->id,
+                    'product_id' => $product->id,
+                ],
+                [
+                    'status' => CampaignApplicationStatus::Submitted,
+                    'notes' => $notes,
+                ],
+            );
+        });
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>|null  $deliverables
+     * @param  array<string, mixed>|null  $contentBrief
+     */
+    public function approveApplication(
+        CampaignApplication $application,
+        ?array $deliverables = null,
+        ?array $contentBrief = null,
+    ): CampaignSlot {
+        $brandWorkspace = currentWorkspace();
+
+        if (! $brandWorkspace || ! $brandWorkspace->isBrand()) {
+            throw new AuthorizationException('A brand workspace is required to approve applications.');
+        }
+
+        $campaign = $application->campaign()->firstOrFail();
+
+        if ((int) $campaign->workspace_id !== (int) $brandWorkspace->id) {
+            throw new AuthorizationException('You can only approve applications for your own campaigns.');
+        }
+
+        if ($application->slot()->exists()) {
+            throw new InvalidArgumentException('This application has already been approved into a slot.');
+        }
+
+        $slotDeliverables = $deliverables ?? (array) ($campaign->deliverables ?? []);
+        $normalizedDeliverables = $this->normalizeDeliverables($slotDeliverables);
+        $slotContentBrief = $contentBrief ?? (array) ($campaign->content_brief ?? []);
+
+        return DB::transaction(function () use ($application, $normalizedDeliverables, $slotContentBrief, $campaign) {
+            $application->update([
+                'status' => CampaignApplicationStatus::Approved,
+            ]);
+
+            return CampaignSlot::query()->create([
+                'campaign_id' => $campaign->id,
+                'application_id' => $application->id,
+                'creator_workspace_id' => $application->creator_workspace_id,
+                'product_id' => $application->product_id,
+                'status' => CampaignSlotStatus::Pending,
+                'unit_price' => $this->calculateTotalBudget($normalizedDeliverables),
+                'quantity' => 1,
+                'subtotal' => $this->calculateTotalBudget($normalizedDeliverables),
+                'deliverables' => $normalizedDeliverables,
+                'content_brief' => $slotContentBrief,
+            ]);
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $contentBrief
+     * @param  array<int, array<string, mixed>>  $deliverables
+     */
+    public function createInquiryCampaignSlot(
+        Workspace $creatorWorkspace,
+        Product $product,
+        array $contentBrief,
+        array $deliverables,
+        ?string $title = null,
+    ): CampaignSlot {
+        if (! $creatorWorkspace->isCreator()) {
+            throw new InvalidArgumentException('Inquiry slots must target a creator workspace.');
+        }
+
+        if ((int) $product->workspace_id !== (int) $creatorWorkspace->id) {
+            throw new InvalidArgumentException('Inquiry slots must use a product owned by the creator workspace.');
+        }
+
+        return DB::transaction(function () use ($creatorWorkspace, $product, $contentBrief, $deliverables, $title) {
+            $campaign = $this->createCampaign(
+                template: null,
+                contentBrief: $contentBrief,
+                deliverables: $deliverables,
+                title: $title,
+                isPublic: false,
+                status: CampaignStatus::Draft,
+            );
+
+            $normalizedDeliverables = $this->normalizeDeliverables($deliverables);
+            $campaignBudget = $this->calculateTotalBudget($normalizedDeliverables);
+
+            return CampaignSlot::query()->create([
+                'campaign_id' => $campaign->id,
+                'application_id' => null,
+                'creator_workspace_id' => $creatorWorkspace->id,
+                'product_id' => $product->id,
+                'status' => CampaignSlotStatus::Pending,
+                'unit_price' => $campaignBudget,
+                'quantity' => 1,
+                'subtotal' => $campaignBudget,
+                'deliverables' => $normalizedDeliverables,
+                'content_brief' => $contentBrief,
+            ]);
         });
     }
 

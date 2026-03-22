@@ -62,6 +62,16 @@ class Product extends Model
         return $this->hasMany(Booking::class);
     }
 
+    public function campaignApplications(): HasMany
+    {
+        return $this->hasMany(CampaignApplication::class);
+    }
+
+    public function campaignSlots(): HasMany
+    {
+        return $this->hasMany(CampaignSlot::class);
+    }
+
     public function publicAvailableSlots(): HasMany
     {
         return $this->availableSlots()
