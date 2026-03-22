@@ -201,7 +201,6 @@ test('campaign service creates private inquiry campaign and execution slot witho
 
     expect($slot->application_id)->toBeNull()
         ->and($slot->status)->toBe(CampaignSlotStatus::Pending)
-        ->and((float) $slot->subtotal)->toBe(4200.0)
         ->and($campaign->is_public)->toBeFalse()
         ->and($campaign->status)->toBe(CampaignStatus::Draft)
         ->and($campaign->slots()->count())->toBe(1)

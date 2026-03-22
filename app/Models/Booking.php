@@ -17,6 +17,7 @@ class Booking extends Model
 
     protected $fillable = [
         'slot_id',
+        'campaign_slot_id',
         'product_id',
         'creator_id',
         'brand_user_id',
@@ -27,6 +28,8 @@ class Booking extends Model
         'guest_name',
         'guest_company',
         'requirement_data',
+        'campaign_details',
+        'campaign_deliverables',
         'amount_paid',
         'status',
         'account_claimed',
@@ -44,6 +47,8 @@ class Booking extends Model
     {
         return [
             'requirement_data' => 'array',
+            'campaign_details' => 'array',
+            'campaign_deliverables' => 'array',
             'amount_paid' => 'decimal:2',
             'counter_amount' => 'decimal:2',
             'account_claimed' => 'boolean',
@@ -65,6 +70,11 @@ class Booking extends Model
     public function slot(): BelongsTo
     {
         return $this->belongsTo(Slot::class);
+    }
+
+    public function campaignSlot(): BelongsTo
+    {
+        return $this->belongsTo(CampaignSlot::class);
     }
 
     public function product(): BelongsTo

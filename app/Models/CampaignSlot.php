@@ -17,9 +17,6 @@ class CampaignSlot extends Model
         'creator_workspace_id',
         'product_id',
         'status',
-        'unit_price',
-        'quantity',
-        'subtotal',
         'deliverables',
         'content_brief',
     ];
@@ -28,9 +25,6 @@ class CampaignSlot extends Model
     {
         return [
             'status' => CampaignSlotStatus::class,
-            'unit_price' => 'decimal:2',
-            'quantity' => 'integer',
-            'subtotal' => 'decimal:2',
             'deliverables' => 'array',
             'content_brief' => 'array',
         ];

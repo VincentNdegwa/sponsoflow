@@ -18,9 +18,6 @@ return new class extends Migration
             $table->foreignId('creator_workspace_id')->constrained('workspaces')->cascadeOnDelete();
             $table->foreignId('product_id')->constrained('products')->cascadeOnDelete();
             $table->string('status')->default('pending');
-            $table->decimal('unit_price', 12, 2)->default(0);
-            $table->integer('quantity')->default(1);
-            $table->decimal('subtotal', 12, 2)->default(0);
             $table->json('deliverables')->nullable();
             $table->json('content_brief')->nullable();
             $table->timestamps();

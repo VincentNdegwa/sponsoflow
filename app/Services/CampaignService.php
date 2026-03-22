@@ -12,6 +12,7 @@ use App\Models\CampaignTemplate;
 use App\Models\Product;
 use App\Models\Workspace;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -159,9 +160,6 @@ class CampaignService
                 'creator_workspace_id' => $application->creator_workspace_id,
                 'product_id' => $application->product_id,
                 'status' => CampaignSlotStatus::Pending,
-                'unit_price' => $this->calculateTotalBudget($normalizedDeliverables),
-                'quantity' => 1,
-                'subtotal' => $this->calculateTotalBudget($normalizedDeliverables),
                 'deliverables' => $normalizedDeliverables,
                 'content_brief' => $slotContentBrief,
             ]);
@@ -206,9 +204,6 @@ class CampaignService
                 'creator_workspace_id' => $creatorWorkspace->id,
                 'product_id' => $product->id,
                 'status' => CampaignSlotStatus::Pending,
-                'unit_price' => $campaignBudget,
-                'quantity' => 1,
-                'subtotal' => $campaignBudget,
                 'deliverables' => $normalizedDeliverables,
                 'content_brief' => $contentBrief,
             ]);
@@ -244,5 +239,16 @@ class CampaignService
     public function calculateTotalBudget(array $deliverables): float
     {
         return round(collect($deliverables)->sum(fn (array $row) => (float) data_get($row, 'subtotal', 0)), 2);
+    }
+
+    public function visibleForWorkspace(Workspace $workspace): Collection
+    {
+        return Campaign::query()
+            ->where(function ($query) use ($workspace) {
+                $query->where('workspace_id', $workspace->id);
+            })
+            ->orderByRaw('workspace_id is null desc')
+            ->orderBy('title')
+            ->get();
     }
 }

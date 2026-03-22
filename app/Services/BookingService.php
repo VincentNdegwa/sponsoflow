@@ -4,11 +4,13 @@ namespace App\Services;
 
 use App\Enums\BookingStatus;
 use App\Enums\BookingType;
+use App\Enums\CampaignSlotStatus;
 use App\Models\Booking;
 use App\Models\BookingInquiryToken;
 use App\Models\BookingInviteToken;
 use App\Models\BookingReviewToken;
 use App\Models\BookingSubmission;
+use App\Models\Campaign;
 use App\Models\Product;
 use App\Models\Slot;
 use App\Models\User;
@@ -22,13 +24,17 @@ use App\Notifications\InquiryRejectedNotification;
 use App\Notifications\RevisionRequestedNotification;
 use App\Notifications\WorkApprovedNotification;
 use App\Notifications\WorkSubmittedNotification;
+use App\Support\CampaignBookingPayloadFormatter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 class BookingService
 {
-    public function __construct(protected PaymentService $paymentService) {}
+    public function __construct(
+        protected PaymentService $paymentService,
+        protected BookingShadowCampaignService $bookingShadowCampaignService,
+    ) {}
 
     public function validateRequirementData(Product $product, array $data): array
     {
@@ -49,32 +55,99 @@ class BookingService
             $creator = $data['creator'];
             $workspace = $data['workspace'] ?? $creator->currentWorkspace();
             $productId = $data['product_id'];
+
             if (! $productId) {
                 return $this->errorResponse('Product ID is required for inquiries');
             }
+
             $product = Product::where('id', $productId)
                 ->where('workspace_id', $workspace->id)
                 ->where('is_public', true)
                 ->where('is_active', true)
                 ->first();
+
             if (! $product) {
                 return $this->errorResponse('Product not found or not available');
             }
-            $totalAmount = $data['requirement_data']['budget'] ?? 0;
+
+            $inputData = is_array($data['requirement_data'] ?? null)
+                ? $data['requirement_data']
+                : [];
+
+            $requirementData = CampaignBookingPayloadFormatter::extractProductRequirements($inputData);
+            $campaignDetails = [];
+            $campaignDeliverables = [];
+
             $isGuest = ! isset($data['brand_user_id']);
+
+            if (! $isGuest) {
+                if (empty($data['brand_workspace_id'])) {
+                    return $this->errorResponse('Brand workspace is required for authenticated inquiries.');
+                }
+
+                $campaignMode = (string) ($data['campaign_mode'] ?? 'new');
+                if ($campaignMode !== 'new' && $campaignMode !== 'existing') {
+                    return $this->errorResponse('Invalid campaign mode selected.');
+                }
+
+                if ($campaignMode === 'existing') {
+                    $campaignId = (int) ($data['campaign_id'] ?? 0);
+                    if ($campaignId <= 0) {
+                        return $this->errorResponse('Please select an existing campaign.');
+                    }
+
+                    $campaign = Campaign::query()
+                        ->whereKey($campaignId)
+                        ->where('workspace_id', $data['brand_workspace_id'])
+                        ->first();
+
+                    if (! $campaign) {
+                        return $this->errorResponse('Selected campaign is invalid for this workspace.');
+                    }
+
+                    $campaignDetails = CampaignBookingPayloadFormatter::fromCampaign($campaign);
+                    $campaignDeliverables = CampaignBookingPayloadFormatter::normalizeDeliverables($campaign->deliverables);
+                } else {
+                    $campaignBudget = (float) data_get($inputData, 'budget', 0);
+                    $campaignDetails = CampaignBookingPayloadFormatter::fromInquiryInput(
+                        creatorName: (string) ($creator->name ?? 'creator'),
+                        budget: $campaignBudget,
+                        input: $inputData,
+                    );
+                }
+            } else {
+                $campaignBudget = (float) data_get($inputData, 'budget', 0);
+                $campaignDetails = CampaignBookingPayloadFormatter::fromInquiryInput(
+                    creatorName: (string) ($creator->name ?? 'creator'),
+                    budget: $campaignBudget,
+                    input: $inputData,
+                );
+            }
+
+            $totalAmount = (float) data_get($campaignDetails, 'meta.total_budget', 0);
+
             $bookingData = [
                 'slot_id' => null,
                 'product_id' => $product->id,
                 'creator_id' => $creator->id,
                 'workspace_id' => $workspace->id,
                 'type' => BookingType::INQUIRY,
-                'requirement_data' => $data['requirement_data'],
+                'requirement_data' => $requirementData,
+                'campaign_details' => $campaignDetails,
+                'campaign_deliverables' => $campaignDeliverables,
                 'amount_paid' => $totalAmount,
                 'currency' => $workspace->currency ?? 'USD',
                 'status' => BookingStatus::INQUIRY,
                 'notes' => 'Custom collaboration proposal submitted',
             ];
+
             if ($isGuest) {
+                data_set($bookingData, 'requirement_data.guest_brand_profile', [
+                    'name' => $data['guest_data']['name'] ?? null,
+                    'email' => $data['guest_data']['email'] ?? null,
+                    'company' => $data['guest_data']['company'] ?? null,
+                ]);
+
                 $bookingData['brand_user_id'] = null;
                 $bookingData['brand_workspace_id'] = null;
                 $bookingData['guest_email'] = $data['guest_data']['email'];
@@ -87,7 +160,13 @@ class BookingService
                 $bookingData['guest_name'] = null;
                 $bookingData['guest_company'] = null;
             }
+
             $booking = Booking::create($bookingData);
+
+            $slot = $this->bookingShadowCampaignService->provisionForInquiry($booking->fresh());
+            if ($slot && ! $booking->campaign_slot_id) {
+                $booking->update(['campaign_slot_id' => $slot->id]);
+            }
 
             $booking->creator->notify(new InquiryReceivedNotification($booking));
 
@@ -233,6 +312,12 @@ class BookingService
             'status' => BookingStatus::REJECTED,
             'creator_notes' => $creatorNotes,
         ]);
+
+        if ($booking->campaignSlot) {
+            $booking->campaignSlot->update([
+                'status' => CampaignSlotStatus::Cancelled,
+            ]);
+        }
 
         $this->sendBrandNotification($booking, new InquiryRejectedNotification($booking));
 

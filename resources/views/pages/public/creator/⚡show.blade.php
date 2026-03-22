@@ -4,10 +4,13 @@ namespace App\Livewire;
 
 use App\Models\User;
 use App\Models\Product;
+use App\Models\Campaign;
 use App\Models\Slot;
 use App\Models\Booking;
 use App\Models\Workspace;
+use App\Support\InquiryCampaignSkeleton;
 use App\Services\BookingService;
+use App\Services\CampaignService;
 use App\Enums\SlotStatus;
 use App\Enums\BookingType;
 use App\Enums\BookingStatus;
@@ -33,18 +36,19 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
     public string $checkoutType = 'instant';
     public bool $isProcessing = false;
     public ?string $errorMessage = null;
+    public string $campaignSelectionMode = 'new';
+    public $selectedCampaignId = null;
 
     public array $guestData = [
         'name' => '',
         'email' => '',
         'company' => '',
-        'website' => '',
         'budget' => '',
+        'campaign_name' => '',
+        'main_goal' => '',
         'pitch' => '',
-        'campaign_goals' => '',
-        'timeline_flexible' => true,
-        'timeline_start' => '',
-        'timeline_end' => '',
+        'product_service_link' => '',
+        'mandatory_mention' => '',
     ];
     public array $requirementData = [];
 
@@ -125,6 +129,8 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
         $this->checkoutType = 'instant';
         $this->showBookingDrawer = false;
         $this->errorMessage = null;
+        $this->campaignSelectionMode = 'new';
+        $this->selectedCampaignId = null;
     }
 
     public function viewSlots($productId): void
@@ -175,8 +181,86 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
         }
         
         $this->checkoutType = $type;
+        if ($type === 'inquiry') {
+            $this->initializeInquirySkeleton();
+        }
         $this->showBookingDrawer = true;
         $this->errorMessage = null;
+    }
+
+    private function initializeInquirySkeleton(): void
+    {
+        $product = $this->selectedProduct;
+
+        if (! $product) {
+            return;
+        }
+
+        if ($this->guestData['campaign_name'] === '') {
+            $this->guestData['campaign_name'] = InquiryCampaignSkeleton::defaultCampaignName($this->user->name);
+        }
+
+        $budget = (float) $product->base_price;
+        $this->guestData['budget'] = (string) $budget;
+
+        if (! $this->isGuestUser() && $this->campaignSelectionMode === 'existing' && empty($this->brandCampaignOptions())) {
+            $this->campaignSelectionMode = 'new';
+            $this->selectedCampaignId = null;
+        }
+    }
+
+    public function updatedCampaignSelectionMode(string $value): void
+    {
+        if (! $this->hasBrandCampaignOptions()) {
+            $this->campaignSelectionMode = 'new';
+            $this->selectedCampaignId = null;
+
+            return;
+        }
+
+        if ($value !== 'existing') {
+            $this->selectedCampaignId = null;
+        }
+    }
+
+    #[Computed]
+    public function hasBrandCampaignOptions(): bool
+    {
+        return $this->brandCampaignOptions()->isNotEmpty();
+    }
+
+    #[Computed]
+    public function usingExistingCampaignForInquiry(): bool
+    {
+        return ! $this->isGuestUser()
+            && $this->hasBrandCampaignOptions()
+            && $this->campaignSelectionMode === 'existing';
+    }
+
+    #[Computed]
+    public function selectedBrandCampaign(): ?Campaign
+    {
+        if (! $this->usingExistingCampaignForInquiry() || ! $this->selectedCampaignId) {
+            return null;
+        }
+
+        return $this->brandCampaignOptions()->firstWhere('id', (int) $this->selectedCampaignId);
+    }
+
+    #[Computed]
+    public function inquirySkeletonSchema(): array
+    {
+        return InquiryCampaignSkeleton::uiSchema();
+    }
+
+    #[Computed]
+    public function brandCampaignOptions()
+    {
+        if ($this->isGuestUser() || ! $this->brandWorkspace) {
+            return collect();
+        }
+
+        return app(CampaignService::class)->visibleForWorkspace($this->brandWorkspace);
     }
 
     public function toggleSlotSelection($slotId): void
@@ -279,16 +363,33 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
             $this->errorMessage = 'You are not authorized to make inquiries.';
             return;
         }
+
+        if (! $this->isGuestUser() && ! $this->hasBrandCampaignOptions()) {
+            $this->campaignSelectionMode = 'new';
+            $this->selectedCampaignId = null;
+        }
         
-        $validation = [
-            'guestData.budget' => 'required|numeric|min:1',
-            'guestData.pitch' => 'required|string',
-            'guestData.campaign_goals' => 'required|string',
-        ];
+        $requiresInquirySkeleton = $this->isGuestUser() || ! $this->usingExistingCampaignForInquiry();
+
+        $validation = [];
+
+        if ($requiresInquirySkeleton) {
+            $validation['guestData.budget'] = 'required|numeric|min:1';
+            $validation['guestData.campaign_name'] = 'required|string|max:255';
+            $validation['guestData.main_goal'] = 'required|in:awareness,sales,content_creation';
+            $validation['guestData.pitch'] = 'required|string';
+            $validation['guestData.product_service_link'] = 'required|url|max:500';
+            $validation['guestData.mandatory_mention'] = 'nullable|string|max:255';
+        }
         
         if ($this->isGuestUser()) {
             $validation['guestData.name'] = 'required|string|max:255';
             $validation['guestData.email'] = 'required|email|max:255';
+        } else {
+            $validation['campaignSelectionMode'] = 'required|in:new,existing';
+            if ($this->campaignSelectionMode === 'existing') {
+                $validation['selectedCampaignId'] = 'required|integer|min:1';
+            }
         }
         
         $this->validate($validation);
@@ -297,18 +398,23 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
         $this->errorMessage = null;
 
         try {
+            $requirementData = [];
+
+            if ($requiresInquirySkeleton) {
+                $requirementData = [
+                    'campaign_name' => $this->guestData['campaign_name'],
+                    'main_goal' => $this->guestData['main_goal'],
+                    'pitch' => $this->guestData['pitch'],
+                    'product_service_link' => $this->guestData['product_service_link'],
+                    'mandatory_mention' => $this->guestData['mandatory_mention'],
+                    'budget' => $this->guestData['budget'],
+                ];
+            }
+
             $data = [
                 'creator' => $this->user,
                 'product_id' => $this->selectedProductId,
-                'requirement_data' => [
-                    'pitch' => $this->guestData['pitch'],
-                    'campaign_goals' => $this->guestData['campaign_goals'],
-                    'website' => $this->guestData['website'],
-                    'timeline_flexible' => $this->guestData['timeline_flexible'],
-                    'timeline_start' => $this->guestData['timeline_start'],
-                    'timeline_end' => $this->guestData['timeline_end'],
-                    'budget' => $this->guestData['budget'],
-                ],
+                'requirement_data' => $requirementData,
             ];
             
             if ($this->isGuestUser()) {
@@ -316,13 +422,19 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
             } else {
                 $data['brand_user_id'] = $this->brandUser->id;
                 $data['brand_workspace_id'] = $this->brandWorkspace?->id;
+                $data['campaign_mode'] = $this->campaignSelectionMode;
+                if ($this->campaignSelectionMode === 'existing') {
+                    $data['campaign_id'] = $this->selectedCampaignId;
+                }
             }
             
             $result = app(BookingService::class)->createInquiry($data);
 
             if ($result['success']) {
                 $this->showBookingDrawer = false;
-                $this->reset(['guestData', 'selectedSlots', 'selectedProductId']);
+                $this->reset(['guestData', 'selectedSlots', 'selectedProductId', 'campaignSelectionMode', 'selectedCampaignId']);
+                $this->fillGuestDataFromAuth();
+                $this->campaignSelectionMode = 'new';
                 session()->flash('success', 'Your collaboration proposal has been sent successfully! The creator typically responds within 24 hours.');
             } else {
                 $this->errorMessage = $result['error'] ?? 'Failed to submit inquiry. Please try again.';
@@ -700,13 +812,9 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
                             <flux:input wire:model="guestData.email" label="Email Address" type="email"
                                 placeholder="your@email.com" required />
 
-                            <div class="grid grid-cols-1 @if ($checkoutType === 'inquiry') md:grid-cols-2 @endif gap-4">
+                            <div class="grid grid-cols-1 gap-4">
                                 <flux:input wire:model="guestData.company" label="Company Name"
                                     placeholder="Your company or brand" />
-                                @if ($checkoutType === 'inquiry')
-                                    <flux:input wire:model="guestData.website" label="Website"
-                                        placeholder="https://yourbrand.com" />
-                                @endif
                             </div>
                         </div>
                     </div>
@@ -716,34 +824,182 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
                     <div class="space-y-6">
                         <flux:heading size="md" class="text-accent">Campaign Details</flux:heading>
 
-                        <div class="space-y-4">
-                            <flux:input wire:model="guestData.budget" label="Proposed Budget" type="number"
-                                placeholder="5000" prefix="$" required />
+                        <div class="space-y-5">
+                            @if (! $this->isGuestUser)
+                                @if ($this->hasBrandCampaignOptions)
+                                    <flux:field>
+                                        <flux:label>Save inquiry to</flux:label>
+                                        <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                                            <label @class([
+                                                'flex cursor-pointer flex-col gap-1 rounded-lg border p-4 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/60',
+                                                'border-accent bg-accent/5' => $campaignSelectionMode === 'new',
+                                                'border-zinc-200 dark:border-zinc-700' => $campaignSelectionMode !== 'new',
+                                            ])>
+                                                <div class="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        wire:model.live="campaignSelectionMode"
+                                                        value="new"
+                                                        class="accent-(--color-accent)"
+                                                    />
+                                                    <span class="font-medium">New Campaign</span>
+                                                </div>
+                                                <p class="pl-5 text-xs text-zinc-500">Create a new private campaign for this inquiry.</p>
+                                            </label>
 
-                            <flux:textarea wire:model="guestData.pitch" label="Campaign Pitch"
-                                placeholder="Tell us about your brand and what you're looking to achieve with this collaboration..."
-                                rows="4" required />
-
-                            <flux:textarea wire:model="guestData.campaign_goals" label="Campaign Goals"
-                                placeholder="What specific outcomes are you hoping for? (e.g., brand awareness, lead generation, etc.)"
-                                rows="3" required />
-
-                            <div class="space-y-3">
-                                <flux:label>Timeline Preference</flux:label>
-                                <div class="space-y-3">
-                                    <flux:checkbox wire:model="guestData.timeline_flexible"
-                                        label="Flexible timeline" />
-
-                                    @if (!$guestData['timeline_flexible'])
-                                        <div class="grid grid-cols-2 gap-4">
-                                            <flux:input wire:model="guestData.timeline_start" label="Preferred Start"
-                                                type="date" />
-                                            <flux:input wire:model="guestData.timeline_end" label="Preferred End"
-                                                type="date" />
+                                            <label @class([
+                                                'flex cursor-pointer flex-col gap-1 rounded-lg border p-4 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/60',
+                                                'border-accent bg-accent/5' => $campaignSelectionMode === 'existing',
+                                                'border-zinc-200 dark:border-zinc-700' => $campaignSelectionMode !== 'existing',
+                                            ])>
+                                                <div class="flex items-center gap-2">
+                                                    <input
+                                                        type="radio"
+                                                        wire:model.live="campaignSelectionMode"
+                                                        value="existing"
+                                                        class="accent-(--color-accent)"
+                                                    />
+                                                    <span class="font-medium">Existing Campaign</span>
+                                                </div>
+                                                <p class="pl-5 text-xs text-zinc-500">Attach this inquiry to one of your existing campaigns.</p>
+                                            </label>
                                         </div>
+                                        <flux:error name="campaignSelectionMode" />
+                                    </flux:field>
+
+                                    @if ($campaignSelectionMode === 'existing')
+                                        <flux:field>
+                                            <flux:label>Select campaign</flux:label>
+                                            <flux:select wire:model.live="selectedCampaignId">
+                                                <option value="">Select your campaign</option>
+                                                @foreach ($this->brandCampaignOptions as $campaign)
+                                                    <option value="{{ $campaign->id }}">
+                                                        {{ $campaign->title }} • {{ $campaign->status->label() }} • {{ $campaign->is_public ? 'Public' : 'Private' }}
+                                                    </option>
+                                                @endforeach
+                                            </flux:select>
+                                            <flux:error name="selectedCampaignId" />
+                                        </flux:field>
+                                    @endif
+                                @endif
+                            @endif
+
+                            @if (! $this->usingExistingCampaignForInquiry)
+                                @foreach ($this->inquirySkeletonSchema['metadata'] as $metaField)
+                                    <flux:field wire:key="inquiry-meta-{{ $metaField['key'] }}">
+                                        <flux:label>
+                                            {{ $metaField['label'] }}
+                                            @if ($metaField['required'])
+                                                *
+                                            @endif
+                                        </flux:label>
+
+                                        <flux:input
+                                            wire:model="guestData.{{ $metaField['key'] }}"
+                                            type="{{ $metaField['type'] === 'number' ? 'number' : 'text' }}"
+                                            :readonly="(bool) ($metaField['readonly'] ?? false)"
+                                            :step="$metaField['type'] === 'number' ? '0.01' : null"
+                                        />
+
+                                        <flux:description>{{ $metaField['help'] }}</flux:description>
+                                        <flux:error name="guestData.{{ $metaField['key'] }}" />
+                                    </flux:field>
+                                @endforeach
+
+                                @foreach ($this->inquirySkeletonSchema['sections'] as $section)
+                                        <flux:heading size="sm" class="mb-4">{{ $section['title'] }}</flux:heading>
+
+                                        <div class="space-y-4">
+                                            @foreach ($section['fields'] as $field)
+                                                <flux:field wire:key="inquiry-field-{{ $field['key'] }}">
+                                                    <flux:label>
+                                                        {{ $field['label'] }}
+                                                        @if ($field['required'])
+                                                            *
+                                                        @endif
+                                                    </flux:label>
+
+                                                    @if ($field['type'] === 'textarea')
+                                                        <flux:textarea
+                                                            wire:model="guestData.{{ $field['key'] }}"
+                                                            rows="4"
+                                                            placeholder="{{ $field['placeholder'] ?? '' }}"
+                                                        />
+                                                    @elseif ($field['type'] === 'select')
+                                                        <flux:select wire:model="guestData.{{ $field['key'] }}">
+                                                            <option value="">Select an option</option>
+                                                            @foreach (($field['options'] ?? []) as $option)
+                                                                <option value="{{ $option['value'] }}">{{ $option['label'] }}</option>
+                                                            @endforeach
+                                                        </flux:select>
+                                                    @else
+                                                        <flux:input
+                                                            wire:model="guestData.{{ $field['key'] }}"
+                                                            type="{{ $field['key'] === 'product_service_link' ? 'url' : 'text' }}"
+                                                            placeholder="{{ $field['placeholder'] ?? '' }}"
+                                                        />
+                                                    @endif
+
+                                                    <flux:error name="guestData.{{ $field['key'] }}" />
+                                                </flux:field>
+                                            @endforeach
+                                        </div>
+                                @endforeach
+                            @else
+                                <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-900/50 p-4 space-y-4">
+                                    @if ($this->selectedBrandCampaign)
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div class="rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3">
+                                                <flux:text size="xs" class="text-zinc-500">Campaign</flux:text>
+                                                <flux:text class="font-medium">{{ $this->selectedBrandCampaign->title }}</flux:text>
+                                            </div>
+                                            <div class="rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3">
+                                                <flux:text size="xs" class="text-zinc-500">Budget</flux:text>
+                                                <flux:text class="font-medium">{{ formatMoney((float) $this->selectedBrandCampaign->total_budget, $this->brandWorkspace) }}</flux:text>
+                                            </div>
+                                            <div class="rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3">
+                                                <flux:text size="xs" class="text-zinc-500">Status</flux:text>
+                                                <flux:text class="font-medium">{{ $this->selectedBrandCampaign->status->label() }}</flux:text>
+                                            </div>
+                                            <div class="rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3">
+                                                <flux:text size="xs" class="text-zinc-500">Visibility</flux:text>
+                                                <flux:text class="font-medium">{{ $this->selectedBrandCampaign->is_public ? 'Public' : 'Private' }}</flux:text>
+                                            </div>
+                                        </div>
+
+                                        @php
+                                            $campaignBrief = is_array($this->selectedBrandCampaign->content_brief)
+                                                ? $this->selectedBrandCampaign->content_brief
+                                                : [];
+                                            $campaignSchema = data_get($campaignBrief, '_form_schema.sections', []);
+                                        @endphp
+
+                                        @if (! empty($campaignSchema))
+                                            <div class="space-y-4">
+                                                @foreach ($campaignSchema as $section)
+                                                    <div class="rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3">
+                                                        <flux:text class="font-semibold mb-2">{{ data_get($section, 'title', 'Campaign Section') }}</flux:text>
+                                                        <div class="space-y-2">
+                                                            @foreach ((array) data_get($section, 'fields', []) as $field)
+                                                                @php
+                                                                    $fieldName = data_get($field, 'name');
+                                                                    $value = $fieldName ? data_get($campaignBrief, $fieldName) : null;
+                                                                @endphp
+                                                                <div>
+                                                                    <flux:text size="xs" class="text-zinc-500">{{ data_get($field, 'label', 'Field') }}</flux:text>
+                                                                    <flux:text>{{ filled($value) ? (is_array($value) ? implode(', ', $value) : $value) : 'Not set' }}</flux:text>
+                                                                </div>
+                                                            @endforeach
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    @else
+                                        <flux:text size="sm" class="text-zinc-500">Select a campaign to view a preview.</flux:text>
                                     @endif
                                 </div>
-                            </div>
+                            @endif
                         </div>
                     </div>
                 @endif

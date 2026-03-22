@@ -350,6 +350,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
         $this->selectedTags = [];
         $this->ratingComment = '';
     }
+
 }; ?>
 
 <div>
@@ -607,7 +608,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                             <flux:icon.chat-bubble-left-right class="h-5 w-5 text-accent" />
                         </div>
                         <div>
-                            <flux:heading size="lg">Campaign Details</flux:heading>
+                            <flux:heading size="lg">Inquiry Note</flux:heading>
                             <flux:text class="text-xs text-zinc-500">Provided by brand</flux:text>
                         </div>
                     </div>
@@ -616,34 +617,12 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                 </section>
             @endif
 
-            @if($booking->requirement_data)
-                <section class="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                    <div class="mb-4 flex items-center gap-2">
-                        <div class="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-900">
-                            <flux:icon.clipboard-document-list class="h-5 w-5 text-accent" />
-                        </div>
-                        <div>
-                            <flux:heading size="lg">Product Requirements</flux:heading>
-                            <flux:text class="text-xs text-zinc-500">Provided by brand</flux:text>
-                        </div>
-                    </div>
-
-                    <div class="divide-y divide-zinc-200 dark:divide-zinc-700">
-                        @foreach($booking->requirement_data as $key => $value)
-                            @if($value)
-                                @php
-                                    $requirement = $booking->product->requirements->firstWhere('id', (int) $key);
-                                    $questionLabel = $requirement?->name ?? ucfirst(str_replace('_', ' ', (string) $key));
-                                @endphp
-                                <div class="py-3">
-                                    <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ $questionLabel }}</flux:text>
-                                    <flux:text class="mt-1 text-sm">{{ is_array($value) ? implode(', ', $value) : $value }}</flux:text>
-                                </div>
-                            @endif
-                        @endforeach
-                    </div>
-                </section>
-            @endif
+            <x-campaigns.payload-preview
+                :campaign-details="$booking->campaign_details"
+                :campaign-deliverables="$booking->campaign_deliverables"
+                :requirement-data="$booking->requirement_data"
+                :requirements="$booking->product?->requirements ?? collect()"
+            />
 
         </div>
 

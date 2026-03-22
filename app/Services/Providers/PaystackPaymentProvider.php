@@ -11,6 +11,7 @@ use App\Models\PaymentConfiguration;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\PaymentReceivedNotification;
+use App\Services\BookingShadowCampaignService;
 use App\Services\ExchangeRateService;
 use App\Services\GuestAccountCreationService;
 use App\Services\PaymentProviderInterface;
@@ -228,6 +229,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
             }
 
             $this->handleGuestAccountCreation($booking);
+            app(BookingShadowCampaignService::class)->activateForPaidInquiry($booking->fresh());
             $this->notifyCreatorPaymentReceived($booking, $payment);
 
             Log::info('Paystack payment confirmed for booking', [

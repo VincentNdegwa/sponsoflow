@@ -1,9 +1,13 @@
 <?php
 
 use App\Enums\BookingStatus;
+use App\Enums\CampaignSlotStatus;
+use App\Enums\CampaignStatus;
 use App\Models\Booking;
 use App\Models\BookingInquiryToken;
+use App\Models\Campaign;
 use App\Models\Product;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Services\BookingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -14,7 +18,11 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     $this->workspace = Workspace::factory()->create(['type' => 'creator']);
-    $this->product = Product::factory()->create(['workspace_id' => $this->workspace->id]);
+    $this->product = Product::factory()->create([
+        'workspace_id' => $this->workspace->id,
+        'is_public' => true,
+        'is_active' => true,
+    ]);
     $this->booking = Booking::factory()->create([
         'product_id' => $this->product->id,
         'workspace_id' => $this->workspace->id,
@@ -61,6 +69,123 @@ test('approveInquiry returns error if booking is not in inquiry status', functio
     Notification::assertNothingSent();
 });
 
+test('createInquiry provisions a pending campaign slot for authenticated brand with default campaign mode', function () {
+    $brandUser = User::factory()->create();
+    $brandWorkspace = Workspace::factory()->brand()->create(['owner_id' => $brandUser->id]);
+
+    $result = $this->service->createInquiry([
+        'creator' => $this->booking->creator,
+        'workspace' => $this->workspace,
+        'product_id' => $this->product->id,
+        'requirement_data' => [
+            'campaign_name' => 'Autumn Launch',
+            'main_goal' => 'awareness',
+            'pitch' => 'Need authentic launch content.',
+            'product_service_link' => 'https://example.com/product',
+            'mandatory_mention' => '@brand',
+            'budget' => 1200,
+        ],
+        'brand_user_id' => $brandUser->id,
+        'brand_workspace_id' => $brandWorkspace->id,
+        'campaign_mode' => 'new',
+    ]);
+
+    expect($result['success'])->toBeTrue();
+
+    $booking = Booking::query()->findOrFail($result['booking_id']);
+
+    expect($booking->campaign_slot_id)->not->toBeNull()
+        ->and($booking->campaignSlot)->not->toBeNull()
+        ->and($booking->campaignSlot->status)->toBe(CampaignSlotStatus::Pending)
+        ->and(data_get($booking->campaign_details, 'mode'))->toBe('new');
+});
+
+test('createInquiry can attach to existing workspace campaign for authenticated brand', function () {
+    $brandUser = User::factory()->create();
+    $brandWorkspace = Workspace::factory()->brand()->create(['owner_id' => $brandUser->id]);
+    $existingCampaign = Campaign::factory()->create([
+        'workspace_id' => $brandWorkspace->id,
+        'title' => 'Nokia Launch 2026',
+        'total_budget' => 500,
+        'content_brief' => [
+            '_form_schema' => [
+                'sections' => [
+                    [
+                        'title' => 'Campaign Details',
+                        'fields' => [
+                            [
+                                'name' => 'what_is_the_main_product_we_are_prom',
+                                'type' => 'text',
+                                'label' => 'What is the main product we are promoting?',
+                            ],
+                            [
+                                'name' => 'what_are_the_3_must_say_benefits',
+                                'type' => 'textarea',
+                                'label' => 'What are the 3 "Must-Say" benefits?',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+            'what_is_the_main_product_we_are_prom' => 'Nokia X',
+            'what_are_the_3_must_say_benefits' => 'Battery, camera, and durability.',
+        ],
+        'status' => CampaignStatus::Draft,
+        'is_public' => true,
+    ]);
+
+    $result = $this->service->createInquiry([
+        'creator' => $this->booking->creator,
+        'workspace' => $this->workspace,
+        'product_id' => $this->product->id,
+        'requirement_data' => [],
+        'brand_user_id' => $brandUser->id,
+        'brand_workspace_id' => $brandWorkspace->id,
+        'campaign_mode' => 'existing',
+        'campaign_id' => $existingCampaign->id,
+    ]);
+
+    expect($result['success'])->toBeTrue();
+
+    $booking = Booking::query()->findOrFail($result['booking_id']);
+
+    expect($booking->campaignSlot)->not->toBeNull()
+        ->and($booking->campaignSlot->campaign_id)->toBe($existingCampaign->id)
+        ->and((float) $booking->amount_paid)->toBe(500.0)
+        ->and(data_get($booking->campaignSlot->content_brief, 'campaign_details.answers.what_is_the_main_product_we_are_prom'))->toBe('Nokia X')
+        ->and(data_get($booking->campaignSlot->content_brief, 'campaign_details.answers.what_are_the_3_must_say_benefits'))->toBe('Battery, camera, and durability.')
+        ->and(data_get($booking->campaign_details, 'selected_campaign_id'))->toBe($existingCampaign->id)
+        ->and(data_get($booking->campaign_details, 'mode'))->toBe('existing');
+});
+
+test('createInquiry stores guest brand profile in requirement data and does not provision slot immediately', function () {
+    $result = $this->service->createInquiry([
+        'creator' => $this->booking->creator,
+        'workspace' => $this->workspace,
+        'product_id' => $this->product->id,
+        'requirement_data' => [
+            'campaign_name' => 'Guest Proposal',
+            'main_goal' => 'content_creation',
+            'pitch' => 'Guest-led collaboration request.',
+            'product_service_link' => 'https://example.com/guest',
+            'mandatory_mention' => '',
+            'budget' => 980,
+        ],
+        'guest_data' => [
+            'name' => 'Guest Brand',
+            'email' => 'guest-brand@example.com',
+            'company' => 'Guest Co',
+        ],
+    ]);
+
+    expect($result['success'])->toBeTrue();
+
+    $booking = Booking::query()->findOrFail($result['booking_id']);
+
+    expect(data_get($booking->requirement_data, 'guest_brand_profile.email'))->toBe('guest-brand@example.com')
+        ->and($booking->campaign_slot_id)->toBeNull();
+});
+
 test('rejectInquiry sets status to rejected and stores creator notes', function () {
     $result = $this->service->rejectInquiry($this->booking, 'Budget too low.');
 
@@ -68,6 +193,37 @@ test('rejectInquiry sets status to rejected and stores creator notes', function 
     $fresh = $this->booking->fresh();
     expect($fresh->status)->toBe(BookingStatus::REJECTED)
         ->and($fresh->creator_notes)->toBe('Budget too low.');
+});
+
+test('rejectInquiry marks linked campaign slot as cancelled', function () {
+    $brandUser = User::factory()->create();
+    $brandWorkspace = Workspace::factory()->brand()->create(['owner_id' => $brandUser->id]);
+
+    $creationResult = $this->service->createInquiry([
+        'creator' => $this->booking->creator,
+        'workspace' => $this->workspace,
+        'product_id' => $this->product->id,
+        'requirement_data' => [
+            'campaign_name' => 'Reject Case',
+            'main_goal' => 'awareness',
+            'pitch' => 'Testing cancellation path.',
+            'product_service_link' => 'https://example.com/reject',
+            'mandatory_mention' => '',
+            'budget' => 1400,
+        ],
+        'brand_user_id' => $brandUser->id,
+        'brand_workspace_id' => $brandWorkspace->id,
+        'campaign_mode' => 'new',
+    ]);
+
+    $booking = Booking::query()->findOrFail($creationResult['booking_id']);
+    expect($booking->campaignSlot)->not->toBeNull();
+
+    $result = $this->service->rejectInquiry($booking, 'No longer a fit');
+
+    expect($result['success'])->toBeTrue()
+        ->and($booking->fresh()->status)->toBe(BookingStatus::REJECTED)
+        ->and($booking->fresh()->campaignSlot->status)->toBe(CampaignSlotStatus::Cancelled);
 });
 
 test('rejectInquiry sends InquiryRejectedNotification to the brand email', function () {

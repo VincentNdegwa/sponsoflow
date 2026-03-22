@@ -21,6 +21,8 @@ return new class extends Migration
             $table->string('guest_name');
             $table->string('guest_company')->nullable();
             $table->json('requirement_data');
+            $table->json('campaign_details')->nullable();
+            $table->json('campaign_deliverables')->nullable();
             $table->decimal('amount_paid', 10, 2);
             $table->string('stripe_payment_intent_id')->nullable();
             $table->string('stripe_session_id')->nullable();
