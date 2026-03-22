@@ -62,7 +62,18 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
             abort(404);
         }
 
-        $this->booking = $booking->load(['product.requirements', 'product.workspace', 'brandUser', 'brandWorkspace', 'slot', 'latestSubmission', 'creator']);
+        $this->booking = $booking->load([
+            'product.requirements',
+            'product.workspace',
+            'brandUser',
+            'brandWorkspace',
+            'slot',
+            'latestSubmission',
+            'submissions',
+            'payments',
+            'latestRating',
+            'creator',
+        ]);
     }
 
     public function approveInquiry(): void
@@ -360,8 +371,8 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
         </div>
     </div>
 
-    <div class="grid gap-8 lg:grid-cols-3">
-        <div class="lg:col-span-2 space-y-8">
+    <div class="grid gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)]">
+        <div class="space-y-8">
 
             @if($this->isCreator() && $booking->canApproveInquiry())
                 <div class="rounded-lg border border-blue-200 bg-blue-50 p-6 dark:border-blue-700 dark:bg-blue-950">
@@ -535,161 +546,196 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                 <x-bookings.submitted-work :submission="$booking->latestSubmission" :revision-count="$booking->revision_count" :max-revisions="$booking->max_revisions" />
             @endif
 
-            <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                @if($this->isBrandUser())
-                    <flux:heading size="lg" class="mb-4">Creator Information</flux:heading>
+            @php $isBrandViewer = $this->isBrandUser(); @endphp
 
-                    <div class="space-y-4">
-                        <div class="grid gap-6 sm:grid-cols-2">
-                            <div>
-                                <flux:text class="text-sm font-medium text-zinc-500">Name</flux:text>
-                                <flux:text class="mt-1">{{ $booking->creator?->name }}</flux:text>
-                            </div>
+            <section class="space-y-6">
+                <div class="mb-5 flex items-center justify-between gap-3">
+                    <div>
+                        <flux:heading size="lg">Delivery Studio</flux:heading>
+                        <flux:text class="text-sm text-zinc-500">Everything related to execution, proof, and settlement</flux:text>
+                    </div>
+                    <flux:badge size="sm" color="zinc">{{ $booking->status->label() }}</flux:badge>
+                </div>
 
-                            <div>
-                                <flux:text class="text-sm font-medium text-zinc-500">Email</flux:text>
-                                <flux:text class="mt-1">{{ $booking->creator?->email }}</flux:text>
-                            </div>
+                <div class="space-y-6">
+                    <x-bookings.show.payment-history :booking="$booking" :is-brand-user="$isBrandViewer" />
+                    <x-bookings.show.submission-history :booking="$booking" />
+                    <x-bookings.show.product-details :booking="$booking" :is-brand-user="$isBrandViewer" />
+                </div>
+            </section>
 
-                            @if($booking->product?->workspace?->name)
-                                <div>
-                                    <flux:text class="text-sm font-medium text-zinc-500">Workspace</flux:text>
-                                    <flux:text class="mt-1">{{ $booking->product->workspace->name }}</flux:text>
-                                </div>
-                            @endif
+            <section class="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="mb-4 flex items-center gap-2">
+                    <div class="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-900">
+                        <flux:icon.information-circle class="h-5 w-5 text-accent" />
+                    </div>
+                    <flux:heading size="lg">{{ $this->isBrandUser() ? 'Creator Profile' : ($booking->brandUser ? 'Brand Profile' : 'Guest Profile') }}</flux:heading>
+                </div>
+
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">Name</dt>
+                        <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
+                            {{ $this->isBrandUser() ? $booking->creator?->name : ($booking->brandUser?->name ?? $booking->guest_name) }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">Email</dt>
+                        <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
+                            {{ $this->isBrandUser() ? $booking->creator?->email : ($booking->brandUser?->email ?? $booking->guest_email) }}
+                        </dd>
+                    </div>
+                    @if($this->isBrandUser() && $booking->product?->workspace?->name)
+                        <div>
+                            <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">Workspace</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">{{ $booking->product->workspace->name }}</dd>
+                        </div>
+                    @endif
+                    @if(! $this->isBrandUser() && ($booking->guest_company || $booking->brandWorkspace?->name))
+                        <div>
+                            <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">Company</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">{{ $booking->guest_company ?? $booking->brandWorkspace?->name }}</dd>
+                        </div>
+                    @endif
+                </dl>
+            </section>
+
+            @if($booking->notes)
+                <section class="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                    <div class="mb-4 flex items-center gap-2">
+                        <div class="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-900">
+                            <flux:icon.chat-bubble-left-right class="h-5 w-5 text-accent" />
+                        </div>
+                        <div>
+                            <flux:heading size="lg">Campaign Details</flux:heading>
+                            <flux:text class="text-xs text-zinc-500">Provided by brand</flux:text>
                         </div>
                     </div>
-                @else
-                    <flux:heading size="lg" class="mb-4">{{ $booking->brandUser ? 'Brand' : 'Guest' }} Information</flux:heading>
 
-                    <div class="space-y-4">
-                        <div class="grid gap-6 sm:grid-cols-2">
-                            <div>
-                                <flux:text class="text-sm font-medium text-zinc-500">Name</flux:text>
-                                <flux:text class="mt-1">{{ $booking->brandUser?->name ?? $booking->guest_name }}</flux:text>
-                            </div>
-
-                            <div>
-                                <flux:text class="text-sm font-medium text-zinc-500">Email</flux:text>
-                                <flux:text class="mt-1">{{ $booking->brandUser?->email ?? $booking->guest_email }}</flux:text>
-                            </div>
-
-                            @if($booking->guest_company || $booking->brandWorkspace?->name)
-                                <div>
-                                    <flux:text class="text-sm font-medium text-zinc-500">Company</flux:text>
-                                    <flux:text class="mt-1">{{ $booking->guest_company ?? $booking->brandWorkspace?->name }}</flux:text>
-                                </div>
-                            @endif
-                        </div>
-                    </div>
-                @endif
-            </div>
+                    <flux:text class="whitespace-pre-wrap text-sm">{{ $booking->notes }}</flux:text>
+                </section>
+            @endif
 
             @if($booking->requirement_data)
-                <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                    <flux:heading size="lg" class="mb-4">Campaign Details</flux:heading>
-                    
-                    <div class="space-y-4">
+                <section class="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                    <div class="mb-4 flex items-center gap-2">
+                        <div class="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-900">
+                            <flux:icon.clipboard-document-list class="h-5 w-5 text-accent" />
+                        </div>
+                        <div>
+                            <flux:heading size="lg">Product Requirements</flux:heading>
+                            <flux:text class="text-xs text-zinc-500">Provided by brand</flux:text>
+                        </div>
+                    </div>
+
+                    <div class="divide-y divide-zinc-200 dark:divide-zinc-700">
                         @foreach($booking->requirement_data as $key => $value)
                             @if($value)
                                 @php
                                     $requirement = $booking->product->requirements->firstWhere('id', (int) $key);
                                     $questionLabel = $requirement?->name ?? ucfirst(str_replace('_', ' ', (string) $key));
                                 @endphp
-                                <div>
-                                    <flux:text class="text-sm font-medium text-zinc-500">{{ $questionLabel }}</flux:text>
-                                    <flux:text class="mt-1">{{ is_array($value) ? implode(', ', $value) : $value }}</flux:text>
+                                <div class="py-3">
+                                    <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ $questionLabel }}</flux:text>
+                                    <flux:text class="mt-1 text-sm">{{ is_array($value) ? implode(', ', $value) : $value }}</flux:text>
                                 </div>
                             @endif
                         @endforeach
                     </div>
-                </div>
+                </section>
             @endif
 
-            @if($booking->notes)
-                <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                    <flux:heading size="lg" class="mb-4">Notes</flux:heading>
-                    <flux:text class="whitespace-pre-wrap">{{ $booking->notes }}</flux:text>
-                </div>
-            @endif
         </div>
 
-        <div class="space-y-6">
-            <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                <flux:heading size="lg" class="mb-4">Booking Status</flux:heading>
-                
-                <div class="space-y-4">
-                    <div>
-                        <flux:text class="text-sm font-medium text-zinc-500">Status</flux:text>
-                        <div class="mt-1">
-                            <flux:badge :color="$booking->status->badgeColor()">
-                                {{ $booking->status->label() }}
-                            </flux:badge>
+        <aside class="space-y-6 xl:sticky xl:top-6 xl:self-start">
+            <section class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+
+                <div>
+                    <div class="mb-5 flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                            <div class="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-900">
+                                <flux:icon.shield-check class="h-5 w-5 text-accent" />
+                            </div>
+                            <flux:heading size="lg">Booking Overview</flux:heading>
                         </div>
-                    </div>
-                    
-                    <div>
-                        <flux:text class="text-sm font-medium text-zinc-500">Type</flux:text>
-                        <div class="mt-1">
-                            <flux:badge :color="$booking->type->badgeColor()">
-                                {{ $booking->type->label() }}
-                            </flux:badge>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <flux:text class="text-sm font-medium text-zinc-500">Amount</flux:text>
-                        <flux:heading class="mt-1">{{ $booking->formatAmount() }}</flux:heading>
+                        <flux:badge :color="$booking->status->badgeColor()">{{ $booking->status->label() }}</flux:badge>
                     </div>
 
-                    @if($booking->revision_count > 0)
-                        <div>
-                            <flux:text class="text-sm font-medium text-zinc-500">Revisions Used</flux:text>
-                            <flux:text class="mt-1">{{ $booking->revision_count }} / {{ $booking->max_revisions }}</flux:text>
+                    <div class="divide-y divide-zinc-200 dark:divide-zinc-700">
+                        <div class="py-3">
+                            <div class="flex items-center justify-between gap-2 text-zinc-500">
+                                <div class="flex items-center gap-2">
+                                    <flux:text class="text-xs font-medium uppercase tracking-wide">Type</flux:text>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <flux:badge color="amber">{{ $booking->type->label() }}</flux:badge>
+                            </div>
                         </div>
-                    @endif
 
-                    @if($booking->auto_approve_at && $booking->status === \App\Enums\BookingStatus::PROCESSING)
-                        <div>
-                            <flux:text class="text-sm font-medium text-zinc-500">Auto-Approves</flux:text>
-                            <flux:text class="mt-1">{{ $booking->auto_approve_at->diffForHumans() }}</flux:text>
+                        <div class="py-3">
+                            <div class="flex items-center gap-2 text-zinc-500">
+                                <flux:text class="text-xs font-medium uppercase tracking-wide">Amount</flux:text>
+                            </div>
+                            <flux:heading class="mt-1">{{ $booking->formatAmount() }}</flux:heading>
                         </div>
-                    @endif
+
+                        @if($booking->revision_count > 0)
+                            <div class="py-3">
+                                <div class="flex items-center gap-2 text-zinc-500">
+                                    <div class="rounded-md bg-zinc-100 p-1.5 dark:bg-zinc-900">
+                                        <flux:icon.arrow-path class="h-4 w-4 text-accent" />
+                                    </div>
+                                    <flux:text class="text-xs font-medium uppercase tracking-wide">Revisions Used</flux:text>
+                                </div>
+                                <div class="mt-2 flex items-center gap-2">
+                                    <flux:badge size="sm" color="zinc">{{ $booking->revision_count }} / {{ $booking->max_revisions }}</flux:badge>
+                                </div>
+                            </div>
+                        @endif
+
+                        @if($booking->auto_approve_at && $booking->status === \App\Enums\BookingStatus::PROCESSING)
+                            <div class="py-3">
+                                <div class="flex items-center gap-2 text-zinc-500">
+                                    <div class="rounded-md bg-zinc-100 p-1.5 dark:bg-zinc-900">
+                                        <flux:icon.clock class="h-4 w-4 text-accent" />
+                                    </div>
+                                    <flux:text class="text-xs font-medium uppercase tracking-wide">Auto-Approval</flux:text>
+                                </div>
+                                <flux:text class="mt-1 text-sm">{{ $booking->auto_approve_at->diffForHumans() }}</flux:text>
+                            </div>
+                        @endif
+                    </div>
                 </div>
-            </div>
+            </section>
 
-            @if($booking->slot)
-                <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                    <flux:heading size="lg" class="mb-4">Scheduled Time</flux:heading>
-                    
-                    <div class="space-y-2">
-                        <div>
-                            <flux:text class="text-sm font-medium text-zinc-500">Date & Time</flux:text>
-                            <flux:text class="mt-1">{{ formatWorkspaceDate($booking->slot->slot_date) }}</flux:text>
-                            <flux:text class="text-sm text-zinc-500">{{ formatWorkspaceTime($booking->slot->slot_date) }}</flux:text>
-                        </div>
+            <section class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="mb-5 flex items-center gap-2">
+                    <div class="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-900">
+                        <flux:icon.clock class="h-5 w-5 text-accent" />
                     </div>
+                    <flux:heading size="lg">Timeline</flux:heading>
                 </div>
-            @endif
 
-            <div class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                <flux:heading size="lg" class="mb-4">Timeline</flux:heading>
-                
-                <div class="space-y-3">
-                    <div>
-                        <flux:text class="text-sm font-medium text-zinc-500">Created</flux:text>
-                        <flux:text class="mt-1">{{ formatWorkspaceDate($booking->created_at) }} at {{ formatWorkspaceTime($booking->created_at) }}</flux:text>
+                <div class="space-y-5 border-l border-dashed border-zinc-300 pl-4 dark:border-zinc-600">
+                    <div class="relative">
+                        <span class="absolute -left-[1.33rem] top-1 h-2.5 w-2.5 rounded-full bg-sky-500"></span>
+                        <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-500">Created</flux:text>
+                        <flux:text class="mt-1 text-sm">{{ formatWorkspaceDate($booking->created_at) }} at {{ formatWorkspaceTime($booking->created_at) }}</flux:text>
                     </div>
-                    
+
                     @if($booking->updated_at->ne($booking->created_at))
-                        <div>
-                            <flux:text class="text-sm font-medium text-zinc-500">Last Updated</flux:text>
-                            <flux:text class="mt-1">{{ formatWorkspaceDate($booking->updated_at) }} at {{ formatWorkspaceTime($booking->updated_at) }}</flux:text>
+                        <div class="relative">
+                            <span class="absolute -left-[1.33rem] top-1 h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                            <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-500">Last Updated</flux:text>
+                            <flux:text class="mt-1 text-sm">{{ formatWorkspaceDate($booking->updated_at) }} at {{ formatWorkspaceTime($booking->updated_at) }}</flux:text>
                         </div>
                     @endif
                 </div>
-            </div>
-        </div>
+            </section>
+
+            <x-bookings.show.rating-summary :booking="$booking" :is-brand-user="$isBrandViewer" />
+        </aside>
     </div>
 
     <x-bookings.submit-work-modal :booking="$booking" />

@@ -179,3 +179,28 @@ test('fulfillInquiryBooking accepting counter updates amount_paid to counter_amo
     expect($result['success'])->toBeTrue();
     expect((float) $this->booking->fresh()->amount_paid)->toBe(450.00);
 });
+
+test('fulfillInquiryBooking preserves existing requirement_data when incoming payload is empty', function () {
+    $this->booking->update([
+        'status' => BookingStatus::PENDING_PAYMENT,
+        'requirement_data' => [
+            'pitch' => 'Launch a creator-led teaser campaign.',
+            'campaign_goals' => 'Boost pre-orders by 20%.',
+        ],
+    ]);
+
+    $mockPayment = Mockery::mock(\App\Services\PaymentService::class);
+    $mockPayment->shouldReceive('createCheckoutSession')
+        ->once()
+        ->andReturn(['id' => 'cs_test_789', 'url' => 'https://stripe.com/pay/cs_test_789']);
+    app()->instance(\App\Services\PaymentService::class, $mockPayment);
+
+    $service = app(BookingService::class);
+    $result = $service->fulfillInquiryBooking($this->booking, []);
+
+    expect($result['success'])->toBeTrue();
+
+    $fresh = $this->booking->fresh();
+    expect($fresh->requirement_data['pitch'])->toBe('Launch a creator-led teaser campaign.')
+        ->and($fresh->requirement_data['campaign_goals'])->toBe('Boost pre-orders by 20%.');
+});

@@ -275,9 +275,13 @@ class BookingService
         }
 
         return DB::transaction(function () use ($booking, $requirementData, $acceptingCounter) {
+            $existingRequirementData = is_array($booking->requirement_data)
+                ? $booking->requirement_data
+                : [];
+
             $updateData = [
                 'status' => BookingStatus::PENDING_PAYMENT,
-                'requirement_data' => $requirementData,
+                'requirement_data' => array_merge($existingRequirementData, $requirementData),
             ];
 
             if ($acceptingCounter) {

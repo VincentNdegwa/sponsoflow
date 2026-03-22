@@ -107,6 +107,16 @@ class Booking extends Model
         return $this->hasOne(BookingSubmission::class)->latestOfMany();
     }
 
+    public function ratings(): HasMany
+    {
+        return $this->hasMany(WorkspaceRating::class);
+    }
+
+    public function latestRating(): HasOne
+    {
+        return $this->hasOne(WorkspaceRating::class)->latestOfMany();
+    }
+
     public function reviewTokens(): HasMany
     {
         return $this->hasMany(BookingReviewToken::class);
