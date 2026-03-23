@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\CampaignStatus;
+use App\Models\Campaign;
 use App\Models\CampaignTemplate;
 use App\Models\Category;
 use App\Models\DeliverableOption;
@@ -319,4 +321,70 @@ test('campaign create page shows only workspace owned templates', function () {
     $availableTemplates = $component->instance()->availableTemplates();
 
     expect($availableTemplates->pluck('id')->all())->toBe([$workspaceTemplate->id]);
+});
+
+test('campaign show page status actions update campaign state', function () {
+    [, $workspace] = actingBrandContext();
+
+    $template = CampaignTemplate::factory()->create([
+        'workspace_id' => $workspace->id,
+    ]);
+
+    $campaign = Campaign::factory()->create([
+        'workspace_id' => $workspace->id,
+        'template_id' => $template->id,
+        'status' => CampaignStatus::Draft,
+        'is_public' => false,
+    ]);
+
+    Livewire::test('pages::campaigns.show', ['campaign' => $campaign])
+        ->call('openStatusModal', 'publish')
+        ->call('confirmStatusChange');
+
+    $campaign->refresh();
+
+    expect($campaign->status)->toBe(CampaignStatus::Published)
+        ->and($campaign->is_public)->toBeTrue();
+
+    Livewire::test('pages::campaigns.show', ['campaign' => $campaign])
+        ->call('openStatusModal', 'pause')
+        ->call('confirmStatusChange');
+
+    $campaign->refresh();
+
+    expect($campaign->status)->toBe(CampaignStatus::Paused)
+        ->and($campaign->is_public)->toBeTrue();
+
+    Livewire::test('pages::campaigns.show', ['campaign' => $campaign])
+        ->call('openStatusModal', 'close')
+        ->call('confirmStatusChange');
+
+    $campaign->refresh();
+
+    expect($campaign->status)->toBe(CampaignStatus::Closed)
+        ->and($campaign->is_public)->toBeFalse();
+});
+
+test('campaign show page visibility action toggles public flag', function () {
+    [, $workspace] = actingBrandContext();
+
+    $template = CampaignTemplate::factory()->create([
+        'workspace_id' => $workspace->id,
+    ]);
+
+    $campaign = Campaign::factory()->create([
+        'workspace_id' => $workspace->id,
+        'template_id' => $template->id,
+        'status' => CampaignStatus::Published,
+        'is_public' => true,
+    ]);
+
+    Livewire::test('pages::campaigns.show', ['campaign' => $campaign])
+        ->call('openVisibilityModal', 'private')
+        ->call('confirmVisibilityChange');
+
+    $campaign->refresh();
+
+    expect($campaign->is_public)->toBeFalse()
+        ->and($campaign->status)->toBe(CampaignStatus::Published);
 });

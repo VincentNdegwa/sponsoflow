@@ -21,6 +21,8 @@ use App\Notifications\InquiryApprovedNotification;
 use App\Notifications\InquiryCounteredNotification;
 use App\Notifications\InquiryReceivedNotification;
 use App\Notifications\InquiryRejectedNotification;
+use App\Notifications\MarketplaceBookingApprovedNotification;
+use App\Notifications\MarketplaceBookingRejectedNotification;
 use App\Notifications\RevisionRequestedNotification;
 use App\Notifications\WorkApprovedNotification;
 use App\Notifications\WorkSubmittedNotification;
@@ -320,6 +322,48 @@ class BookingService
         }
 
         $this->sendBrandNotification($booking, new InquiryRejectedNotification($booking));
+
+        return $this->successResponse([]);
+    }
+
+    public function approveMarketplaceApplicationBooking(Booking $booking): array
+    {
+        if (! $booking->canCreatorApproveMarketplaceApplication()) {
+            return $this->errorResponse('This marketplace booking cannot be approved at this time.');
+        }
+
+        $booking->update([
+            'status' => BookingStatus::PENDING_PAYMENT,
+            'creator_notes' => null,
+        ]);
+
+        $brandEmail = $this->resolveBrandEmail($booking);
+        $token = BookingInquiryToken::generateFor($booking, 'respond', $brandEmail);
+        $checkoutUrl = route('bookings.inquiry-respond', ['token' => $token->token]);
+
+        $this->sendBrandNotification($booking, new MarketplaceBookingApprovedNotification($booking->fresh(), $checkoutUrl));
+
+        return $this->successResponse(['checkout_url' => $checkoutUrl]);
+    }
+
+    public function rejectMarketplaceApplicationBooking(Booking $booking, ?string $creatorNotes = null): array
+    {
+        if (! $booking->canCreatorRejectMarketplaceApplication()) {
+            return $this->errorResponse('This marketplace booking cannot be rejected at this time.');
+        }
+
+        $booking->update([
+            'status' => BookingStatus::REJECTED,
+            'creator_notes' => $creatorNotes,
+        ]);
+
+        if ($booking->campaignSlot) {
+            $booking->campaignSlot->update([
+                'status' => CampaignSlotStatus::Cancelled,
+            ]);
+        }
+
+        $this->sendBrandNotification($booking, new MarketplaceBookingRejectedNotification($booking->fresh()));
 
         return $this->successResponse([]);
     }

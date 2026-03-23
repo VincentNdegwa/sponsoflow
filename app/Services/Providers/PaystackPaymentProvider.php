@@ -3,6 +3,7 @@
 namespace App\Services\Providers;
 
 use App\Enums\BookingStatus;
+use App\Enums\CampaignSlotStatus;
 use App\Enums\SlotStatus;
 use App\Models\Booking;
 use App\Models\BookingPayment;
@@ -225,6 +226,12 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 $booking->slot->update([
                     'status' => SlotStatus::Booked,
                     'reserved_until' => null,
+                ]);
+            }
+
+            if ($booking->isMarketplaceApplication() && $booking->campaignSlot) {
+                $booking->campaignSlot->update([
+                    'status' => CampaignSlotStatus::Active,
                 ]);
             }
 

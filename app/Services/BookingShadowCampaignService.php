@@ -138,11 +138,6 @@ class BookingShadowCampaignService
         );
     }
 
-    /**
-     * @param  array<string, mixed>  $requirementData
-     * @param  array<string, mixed>  $campaignDetails
-     * @param  array<string, mixed>  $shadowCampaign
-     */
     private function upsertShadowCampaignAndSlot(
         Booking $booking,
         array $requirementData,

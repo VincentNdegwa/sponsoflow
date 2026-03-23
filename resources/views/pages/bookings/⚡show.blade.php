@@ -38,6 +38,10 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
     public string $counterNote = '';
     public string $counterAmount = '';
 
+    // Marketplace application actions
+    public bool $showMarketplaceRejectModal = false;
+    public string $marketplaceRejectionNote = '';
+
     // Brand counter-offer response
     public bool $showCounterAcceptStep = false;
     public array $requirementData = [];
@@ -120,6 +124,35 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
             $this->counterAmount = '';
             $this->counterNote = '';
             $this->dispatch('success', 'Counter-offer sent — the brand has been notified.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+    }
+
+    public function approveMarketplaceApplication(): void
+    {
+        $result = app(BookingService::class)->approveMarketplaceApplicationBooking($this->booking);
+
+        if ($result['success']) {
+            $this->booking->refresh();
+            $this->dispatch('success', 'Marketplace application approved — the brand has been emailed a payment link.');
+        } else {
+            $this->dispatch('error', $result['error']);
+        }
+    }
+
+    public function rejectMarketplaceApplication(): void
+    {
+        $result = app(BookingService::class)->rejectMarketplaceApplicationBooking(
+            $this->booking,
+            $this->marketplaceRejectionNote ?: null,
+        );
+
+        if ($result['success']) {
+            $this->booking->refresh();
+            $this->showMarketplaceRejectModal = false;
+            $this->marketplaceRejectionNote = '';
+            $this->dispatch('success', 'Marketplace application rejected — the brand has been notified.');
         } else {
             $this->dispatch('error', $result['error']);
         }
@@ -450,6 +483,45 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
                 </div>
             @endif
 
+            @if($this->isCreator() && $booking->canCreatorApproveMarketplaceApplication())
+                <div class="rounded-lg border border-violet-200 bg-violet-50 p-6 dark:border-violet-700 dark:bg-violet-950">
+                    <flux:heading size="lg" class="mb-1">Marketplace Match Ready</flux:heading>
+                    <flux:text class="mb-4 text-zinc-600 dark:text-zinc-400">
+                        This brand approved your marketplace application for <strong>{{ $booking->product?->name }}</strong>.
+                        Confirm to send them a payment link or reject if it is not a fit.
+                    </flux:text>
+
+                    <div class="flex flex-wrap gap-3">
+                        <flux:button
+                            wire:click="approveMarketplaceApplication"
+                            wire:loading.attr="disabled"
+                            variant="primary"
+                            icon="check"
+                        >
+                            <span wire:loading.remove wire:target="approveMarketplaceApplication">Approve Match</span>
+                            <span wire:loading wire:target="approveMarketplaceApplication">Approving…</span>
+                        </flux:button>
+
+                        <flux:button
+                            wire:click="$set('showMarketplaceRejectModal', true)"
+                            variant="danger"
+                            icon="x-mark"
+                        >
+                            Reject
+                        </flux:button>
+                    </div>
+                </div>
+            @endif
+
+            @if($this->isBrandUser() && $booking->isMarketplaceApplication() && $booking->status === \App\Enums\BookingStatus::PENDING)
+                <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-6 dark:border-indigo-700 dark:bg-indigo-950">
+                    <flux:heading size="lg" class="mb-1">Awaiting Creator Confirmation</flux:heading>
+                    <flux:text class="text-zinc-600 dark:text-zinc-400">
+                        The creator is reviewing your approved application. Once they confirm, you'll receive a payment link.
+                    </flux:text>
+                </div>
+            @endif
+
             @if($this->isBrandUser() && $booking->canAcceptCounter())
                 @if(! $showCounterAcceptStep)
                     <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-6 dark:border-indigo-700 dark:bg-indigo-950">
@@ -722,6 +794,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
     <x-bookings.revision-request-modal :booking="$booking" />
     <x-bookings.dispute-modal :booking="$booking" />
     <x-bookings.reject-inquiry-modal :booking="$booking" />
+    <x-bookings.reject-marketplace-modal :booking="$booking" />
     <x-bookings.counter-inquiry-modal :booking="$booking" />
 
     <flux:modal wire:model.self="showRatingPrompt" class="md:w-2xl">

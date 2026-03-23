@@ -207,6 +207,16 @@ class Booking extends Model
         return $this->isInquiry() && $this->status === BookingStatus::PENDING_PAYMENT;
     }
 
+    public function canCreatorApproveMarketplaceApplication(): bool
+    {
+        return $this->isMarketplaceApplication() && $this->status === BookingStatus::PENDING;
+    }
+
+    public function canCreatorRejectMarketplaceApplication(): bool
+    {
+        return $this->canCreatorApproveMarketplaceApplication();
+    }
+
     public function canReviewSubmittedWork(): bool
     {
         return $this->status === BookingStatus::PROCESSING && $this->latestSubmission !== null;
@@ -240,6 +250,11 @@ class Booking extends Model
     public function isInquiry(): bool
     {
         return $this->type === BookingType::INQUIRY;
+    }
+
+    public function isMarketplaceApplication(): bool
+    {
+        return $this->type === BookingType::MARKETPLACE_APPLICATION;
     }
 
     public function hasSlot(): bool

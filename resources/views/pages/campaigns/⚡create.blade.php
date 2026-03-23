@@ -379,7 +379,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
             'briefFields.*.type' => 'required|string|'.CampaignFieldTypeRegistry::validationRule(),
             'briefFields.*.options' => 'nullable|array',
             'briefFields.*.options.*' => 'string|max:120',
-            'deliverables' => 'required|array|min:1',
+            'deliverables' => 'nullable|array',
             'deliverables.*.deliverable_option_id' => 'required|integer|exists:deliverable_options,id',
             'deliverables.*.type_slug' => 'required|string|max:120',
             'deliverables.*.label' => 'required|string|max:120',
@@ -457,7 +457,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
                 campaign: $campaign,
                 template: $template,
                 contentBrief: $contentBriefPayload,
-                deliverables: $this->deliverables,
+                deliverables: $this->deliverables?? [],
                 title: $this->title,
                 isPublic: $this->isPublic,
                 status: $campaign->status,
@@ -706,15 +706,18 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
                     variant="primary"
                     icon="plus"
                     wire:click="addDeliverable"
-                    :disabled="$this->deliverableOptions->isEmpty()"
                 >
                     Add Deliverable
                 </flux:button>
             </div>
 
             @if($this->deliverableOptions->isEmpty())
-                <div class="rounded-xl border border-dashed border-zinc-300 p-5 text-center text-sm text-zinc-500 dark:border-zinc-700">
-                    No deliverable types are available for this workspace.
+                <div class="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-5 text-center text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+                    <div class="font-medium">No deliverable types are available yet.</div>
+                    <div class="mt-1">Create deliverable options to unlock this form.</div>
+                    <flux:button variant="filled" class="mt-3" :href="route('campaigns.deliverable-options')">
+                        Manage Deliverable Options
+                    </flux:button>
                 </div>
             @endif
 
