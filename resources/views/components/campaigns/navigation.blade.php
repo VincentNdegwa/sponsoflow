@@ -22,15 +22,18 @@
 @endphp
 
 <div class="flex flex-wrap items-center gap-2">
-    @foreach ($items as $item)
-        <flux:button
-            variant="ghost"
-            href="{{ $item['href'] }}"
-            :class="$item['key'] === $currentKey ? 'bg-zinc-100 dark:bg-zinc-800' : ''"
-        >
-            {{ $item['label'] }}
-        </flux:button>
-    @endforeach
+    <flux:dropdown>
+        <flux:button variant="ghost" icon="ellipsis-horizontal">{{ $items[array_search($currentKey, array_column($items, 'key'))]['label'] ?? 'Campaigns' }}</flux:button>
+        <flux:menu>
+            @foreach ($items as $item)
+                @if ($item['key'] === $currentKey)
+                    <flux:menu.item href="{{ $item['href'] }}" icon="check">{{ $item['label'] }}</flux:menu.item>
+                @else
+                    <flux:menu.item href="{{ $item['href'] }}">{{ $item['label'] }}</flux:menu.item>
+                @endif
+            @endforeach
+        </flux:menu>
+    </flux:dropdown>
 
     @if (isset($createButton['href']))
         <flux:button variant="primary" href="{{ $createButton['href'] }}" icon="plus">

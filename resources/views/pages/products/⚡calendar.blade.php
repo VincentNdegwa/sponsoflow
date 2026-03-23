@@ -108,8 +108,15 @@ new #[Layout('layouts::app'), Title('Product Calendar')] class extends Component
         </div>
 
         <div class="flex gap-2">
-            <flux:button :href="route('products.show', $product)" variant="ghost">
-                Back to Product
+            <flux:dropdown>
+                <flux:button variant="ghost" icon="ellipsis-horizontal">Actions</flux:button>
+                <flux:menu>
+                    <flux:menu.item :href="route('products.show', $product)" icon="arrow-left">Back to Product</flux:menu.item>
+                    <flux:menu.item :href="route('products.index')" icon="squares-2x2">All Products</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+            <flux:button :href="route('products.show', $product)" variant="primary" icon="plus">
+                Add Slot
             </flux:button>
         </div>
     </div>

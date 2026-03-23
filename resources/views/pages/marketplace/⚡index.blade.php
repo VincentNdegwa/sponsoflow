@@ -199,7 +199,7 @@ new #[Layout('layouts::app'), Title('Marketplace')] class extends Component {
 }; ?>
 
 <div class="space-y-8">
-    <section class="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-zinc-50 p-8 shadow-sm dark:border-zinc-800 dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-900">
+    <section class="rounded-3xl border border-accent-100 bg-gradient-to-br from-amber-50 via-white to-zinc-50 p-8 shadow-sm dark:border-zinc-800 dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-900">
         <div class="flex flex-wrap items-center justify-between gap-6">
             <div>
                 <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-amber-700 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200">

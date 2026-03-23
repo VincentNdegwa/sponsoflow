@@ -272,20 +272,20 @@ new #[Layout('layouts::app'), Title('Product Details')] class extends Component 
         </div>
         
         <div class="flex gap-2">
-            <flux:button wire:click="confirmPublicToggle" variant="{{ $product->is_public ? 'ghost' : 'filled' }}" icon="{{ $product->is_public ? 'eye-slash' : 'eye' }}">
-                Make {{ $product->is_public ? 'Private' : 'Public' }}
-            </flux:button>
-            <flux:button wire:click="openBatchModal" variant="filled" icon="squares-plus" class="bg-blue-600 hover:bg-blue-700">
-                Batch Generate
-            </flux:button>
+            <flux:dropdown>
+                <flux:button variant="ghost" icon="ellipsis-horizontal">Actions</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="confirmPublicToggle" icon="{{ $product->is_public ? 'eye-slash' : 'eye' }}">
+                        Make {{ $product->is_public ? 'Private' : 'Public' }}
+                    </flux:menu.item>
+                    <flux:menu.item wire:click="openBatchModal" icon="squares-plus">Batch Generate</flux:menu.item>
+                    <flux:menu.separator />
+                    <flux:menu.item :href="route('products.calendar', $product)" icon="calendar">Calendar View</flux:menu.item>
+                    <flux:menu.item :href="route('products.index')" icon="arrow-left">Back to Products</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
             <flux:button wire:click="openSlotModal" variant="primary" icon="plus">
                 Add Single Slot
-            </flux:button>
-            <flux:button :href="route('products.calendar', $product)" variant="ghost" icon="calendar">
-                Calendar View
-            </flux:button>
-            <flux:button :href="route('products.index')" variant="ghost">
-                Back to Products
             </flux:button>
         </div>
     </div>
