@@ -91,4 +91,40 @@ test('payment success page shows claim account cta for unclaimed guest booking',
     $response->assertOk();
     $response->assertViewIs('payment.success');
     $response->assertSee('Claim Account');
+    $response->assertViewHas('claim_account_url', fn ($url) => is_string($url) && $url !== '');
+
+    $payment->booking->refresh();
+    expect(data_get($payment->booking->requirement_data, 'claim_account.url'))->not->toBeEmpty();
+});
+
+test('payment success page reuses previously stored claim account url', function () {
+    $payment = createCompletedPaystackPayment('claimable-ref-existing-url');
+
+    $claimUser = User::factory()->create([
+        'email' => 'guest-stored-url@example.com',
+    ]);
+
+    $storedUrl = 'https://example.test/reset-password/demo-token?email=guest-stored-url%40example.com';
+
+    $payment->booking->update([
+        'guest_name' => 'Stored URL Guest',
+        'guest_email' => 'guest-stored-url@example.com',
+        'brand_user_id' => $claimUser->id,
+        'account_claimed' => false,
+        'requirement_data' => [
+            'claim_account' => [
+                'url' => $storedUrl,
+                'email' => 'guest-stored-url@example.com',
+            ],
+        ],
+    ]);
+
+    $response = get(route('payment.success', ['reference' => 'claimable-ref-existing-url']));
+
+    $response->assertOk();
+    $response->assertViewIs('payment.success');
+    $response->assertViewHas('claim_account_url', $storedUrl);
+
+    $payment->booking->refresh();
+    expect(data_get($payment->booking->requirement_data, 'claim_account.url'))->toBe($storedUrl);
 });

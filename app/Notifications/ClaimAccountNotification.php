@@ -3,8 +3,9 @@
 namespace App\Notifications;
 
 use App\Models\Booking;
+use App\Models\User;
 use App\Models\Workspace;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Support\ClaimAccountResetUrl;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -15,6 +16,7 @@ class ClaimAccountNotification extends Notification implements ShouldQueue
     use Queueable;
 
     public Booking $booking;
+
     public Workspace $workspace;
 
     public function __construct(Booking $booking, Workspace $workspace)
@@ -30,8 +32,9 @@ class ClaimAccountNotification extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        $token = app('auth.password.broker')->createToken($notifiable);
-        $url = url(config('app.url') . route('password.reset', ['token' => $token, 'email' => $notifiable->getEmailForPasswordReset()], false));
+        $url = $notifiable instanceof User
+            ? ClaimAccountResetUrl::resolveFor($notifiable, $this->booking->fresh())
+            : null;
 
         return (new MailMessage)
             ->subject('Claim Your SponsorFlow Account - Payment Successful!')
@@ -45,7 +48,6 @@ class ClaimAccountNotification extends Notification implements ShouldQueue
                 'amount_paid' => formatMoney($this->booking->amount_paid),
             ]);
     }
-
 
     public function toArray(object $notifiable): array
     {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\BookingPayment;
 use App\Services\PaymentService;
+use App\Support\ClaimAccountResetUrl;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -97,11 +98,7 @@ class PaymentController extends Controller
             return null;
         }
 
-        $token = app('auth.password.broker')->createToken($claimUser);
-        $url = url(config('app.url').route('password.reset', [
-            'token' => $token,
-            'email' => $claimUser->getEmailForPasswordReset(),
-        ], false));
+        $url = ClaimAccountResetUrl::resolveFor($claimUser, $booking);
 
         return [
             'url' => $url,
