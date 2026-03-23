@@ -6,7 +6,7 @@
     <body class="min-h-screen bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
         <div class="flex min-h-screen flex-col items-center justify-center px-6 py-12">
             <a href="{{ route('home') }}" class="mb-8 flex items-center gap-2.5" wire:navigate>
-                <div class="flex size-8 items-center justify-center rounded-lg bg-amber-400">
+                <div class="flex size-8 items-center justify-center rounded-lg bg-accent-400">
                     <svg class="size-4 text-zinc-950" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M10 2L2 7l8 5 8-5-8-5zM2 13l8 5 8-5M2 10l8 5 8-5" />
                     </svg>

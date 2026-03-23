@@ -65,8 +65,8 @@ new #[Title('Creator Onboarding')] class extends Component {
             @if($this->provider === 'paystack')
                 @include('livewire.onboarding.providers.paystack')
             @else
-                <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
-                    <flux:text class="text-amber-700">Selected provider is not supported in onboarding yet.</flux:text>
+                <div class="rounded-md border border-amber-200 bg-accent-50 p-4">
+                    <flux:text class="bg-accent-700">Selected provider is not supported in onboarding yet.</flux:text>
                 </div>
             @endif
         </div>
@@ -84,8 +84,8 @@ new #[Title('Creator Onboarding')] class extends Component {
         @endif
 
         @if (session('info'))
-            <div class="mx-6 mb-6 rounded-md border border-amber-200 bg-amber-50 p-3">
-                <flux:text class="text-amber-700">{{ session('info') }}</flux:text>
+            <div class="mx-6 mb-6 rounded-md border border-amber-200 bg-accent-50 p-3">
+                <flux:text class="bg-accent-700">{{ session('info') }}</flux:text>
             </div>
         @endif
     </div>

@@ -16,7 +16,7 @@
         <header class="sticky top-0 z-50 border-b border-zinc-100 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90">
             <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
                 <div class="flex items-center gap-2">
-                    <div class="flex size-8 items-center justify-center rounded-lg bg-amber-400">
+                    <div class="flex size-8 items-center justify-center rounded-lg bg-accent-400">
                         <svg class="size-4 text-zinc-950" viewBox="0 0 20 20" fill="currentColor">
                             <path d="M10 2L2 7l8 5 8-5-8-5zM2 13l8 5 8-5M2 10l8 5 8-5"/>
                         </svg>
@@ -51,7 +51,7 @@
             <div class="mx-auto max-w-7xl">
                 <div class="mx-auto max-w-3xl text-center">
                     <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-4 py-1.5 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
-                        <span class="size-1.5 rounded-full bg-amber-400"></span>
+                        <span class="size-1.5 rounded-full bg-accent-400"></span>
                         Escrow-backed payments · Global creators · Professional workflows
                     </div>
                     <h1 class="mb-6 text-5xl font-semibold leading-tight tracking-tight text-zinc-900 dark:text-white md:text-6xl lg:text-7xl">
@@ -87,7 +87,7 @@
                                     <div class="text-sm font-semibold text-zinc-900 dark:text-white">Campaign: Q2 Skincare Launch</div>
                                     <div class="mt-0.5 text-xs text-zinc-500">TikTok UGC · @glowcreator · $1,200</div>
                                 </div>
-                                <div class="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-400">In Escrow</div>
+                                <div class="rounded-full bg-accent-100 px-3 py-1 text-xs font-medium bg-accent-700 dark:bg-accent-400/10 dark:bg-accent-400">In Escrow</div>
                             </div>
                             <div class="relative">
                                 <div class="absolute left-3 top-0 h-full w-px bg-zinc-100 dark:bg-zinc-800"></div>
@@ -111,7 +111,7 @@
                                         </div>
                                     </div>
                                     <div class="relative flex items-start gap-3">
-                                        <div class="absolute -left-9 flex size-6 items-center justify-center rounded-full bg-amber-400">
+                                        <div class="absolute -left-9 flex size-6 items-center justify-center rounded-full bg-accent-400">
                                             <svg class="size-3 text-zinc-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                         </div>
                                         <div>
@@ -139,7 +139,7 @@
         <section id="how-it-works" class="border-t border-zinc-100 px-6 py-24 dark:border-zinc-800">
             <div class="mx-auto max-w-7xl">
                 <div class="mx-auto mb-16 max-w-xl text-center">
-                    <div class="mb-4 text-xs font-semibold uppercase tracking-widest text-amber-500">Pay with Peace of Mind</div>
+                    <div class="mb-4 text-xs font-semibold uppercase tracking-widest bg-accent-500">Pay with Peace of Mind</div>
                     <h2 class="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white">Escrow-backed. Every time.</h2>
                     <p class="mt-4 text-zinc-500 dark:text-zinc-400">Funds are held securely until deliverables are approved. No more paying upfront and hoping for the best.</p>
                 </div>
@@ -152,11 +152,11 @@
                         <h3 class="mb-3 text-xl font-semibold text-zinc-900 dark:text-white">Commit</h3>
                         <p class="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">Funds are secured in escrow the moment you confirm a booking. Your money is protected until the work is done.</p>
                     </div>
-                    <div class="relative rounded-2xl border border-amber-200 bg-amber-50 p-8 dark:border-amber-400/20 dark:bg-amber-400/5">
+                    <div class="relative rounded-2xl border border-amber-200 bg-accent-50 p-8 dark:border-amber-400/20 dark:bg-accent-400/5">
                         <div class="mb-5 flex size-12 items-center justify-center rounded-xl bg-white shadow-sm dark:bg-zinc-800">
                             <svg class="size-5 text-zinc-700 dark:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                         </div>
-                        <div class="mb-2 text-xs font-semibold uppercase tracking-widest text-amber-500">Step 02</div>
+                        <div class="mb-2 text-xs font-semibold uppercase tracking-widest bg-accent-500">Step 02</div>
                         <h3 class="mb-3 text-xl font-semibold text-zinc-900 dark:text-white">Collaborate</h3>
                         <p class="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">Exchange requirements, upload assets, and communicate directly on the platform. No email threads, no mismatched briefs.</p>
                     </div>
@@ -176,7 +176,7 @@
             <div class="mx-auto max-w-7xl">
                 <div class="mb-12 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <div class="mb-3 text-xs font-semibold uppercase tracking-widest text-amber-500">Creator Marketplace</div>
+                        <div class="mb-3 text-xs font-semibold uppercase tracking-widest bg-accent-500">Creator Marketplace</div>
                         <h2 class="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white">Find the right creator, fast.</h2>
                         <p class="mt-3 max-w-lg text-zinc-500 dark:text-zinc-400">Browse verified creators by niche, platform, and availability. Every listing shows deliverables, pricing, and global availability.</p>
                     </div>
@@ -236,7 +236,7 @@
         <section id="features" class="border-t border-zinc-100 px-6 py-24 dark:border-zinc-800">
             <div class="mx-auto max-w-7xl">
                 <div class="mx-auto mb-16 max-w-xl text-center">
-                    <div class="mb-4 text-xs font-semibold uppercase tracking-widest text-amber-500">Platform Technology</div>
+                    <div class="mb-4 text-xs font-semibold uppercase tracking-widest bg-accent-500">Platform Technology</div>
                     <h2 class="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white">Everything your partnership needs.</h2>
                     <p class="mt-4 text-zinc-500 dark:text-zinc-400">Standardized workflows that protect both sides from the first inquiry to the final payment.</p>
                 </div>
@@ -276,7 +276,7 @@
                         <h3 class="mb-2 text-base font-semibold text-zinc-900 dark:text-white">Truly Global</h3>
                         <p class="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">Multi-currency support for USD, EUR, GBP, NGN, GHS, ZAR, and more. Creators receive funds in their local currency.</p>
                     </div>
-                    <div class="rounded-2xl border border-amber-200 bg-amber-50 p-7 dark:border-amber-400/20 dark:bg-amber-400/5">
+                    <div class="rounded-2xl border border-amber-200 bg-accent-50 p-7 dark:border-amber-400/20 dark:bg-accent-400/5">
                         <div class="mb-5 flex size-10 items-center justify-center rounded-xl bg-white shadow-sm dark:bg-zinc-800">
                             <svg class="size-5 text-zinc-700 dark:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
                         </div>
@@ -373,7 +373,7 @@
         <footer class="border-t border-zinc-100 px-6 py-10 dark:border-zinc-800">
             <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-sm text-zinc-400 sm:flex-row">
                 <div class="flex items-center gap-2">
-                    <div class="flex size-6 items-center justify-center rounded-md bg-amber-400">
+                    <div class="flex size-6 items-center justify-center rounded-md bg-accent-400">
                         <svg class="size-3 text-zinc-950" viewBox="0 0 20 20" fill="currentColor">
                             <path d="M10 2L2 7l8 5 8-5-8-5zM2 13l8 5 8-5M2 10l8 5 8-5"/>
                         </svg>

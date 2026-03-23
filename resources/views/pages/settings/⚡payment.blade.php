@@ -148,8 +148,8 @@ new #[Title('Payment settings')] class extends Component {
                 @includeIf($providerPartial)
 
                 @if(! view()->exists($providerPartial))
-                    <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
-                        <flux:text class="text-amber-700">Selected provider is not supported in settings yet.</flux:text>
+                    <div class="rounded-md border border-amber-200 bg-accent-50 p-4">
+                        <flux:text class="bg-accent-700">Selected provider is not supported in settings yet.</flux:text>
                     </div>
                 @endif
 

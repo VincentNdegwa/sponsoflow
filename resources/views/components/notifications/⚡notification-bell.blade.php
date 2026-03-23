@@ -78,7 +78,7 @@ new class extends Component {
             'payment_received' => ['icon' => 'banknotes', 'label' => 'Payment Received', 'color' => 'text-green-500'],
             'work_submitted' => ['icon' => 'arrow-up-tray', 'label' => 'Work Submitted', 'color' => 'text-blue-500'],
             'work_approved' => ['icon' => 'check-circle', 'label' => 'Work Approved', 'color' => 'text-green-500'],
-            'revision_requested' => ['icon' => 'arrow-path', 'label' => 'Revision Requested', 'color' => 'text-amber-500'],
+            'revision_requested' => ['icon' => 'arrow-path', 'label' => 'Revision Requested', 'color' => 'bg-accent-500'],
             'dispute_opened' => ['icon' => 'shield-exclamation', 'label' => 'Dispute Opened', 'color' => 'text-red-500'],
             'booking_invite' => ['icon' => 'envelope', 'label' => 'Booking Invite', 'color' => 'text-violet-500'],
             default => ['icon' => 'bell', 'label' => 'Notification', 'color' => 'text-zinc-500'],

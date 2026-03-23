@@ -12,9 +12,9 @@
                     </p>
 
                     @if (!empty($claim_account_url))
-                        <div class="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-left">
-                            <p class="text-sm font-medium text-amber-900">Claim your account to manage this booking</p>
-                            <p class="mt-1 text-sm text-amber-800">
+                        <div class="mt-6 rounded-lg border border-amber-200 bg-accent-50 p-4 text-left">
+                            <p class="text-sm font-medium bg-accent-900">Claim your account to manage this booking</p>
+                            <p class="mt-1 text-sm bg-accent-800">
                                 We created an account for {{ $claim_account_email }}. Set your password now to access
                                 your brand workspace and track this booking.
                             </p>

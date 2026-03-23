@@ -625,7 +625,7 @@ new #[Layout('layouts::guest'), Title('Creator Profile')] class extends Componen
 
                 @if ($selectedProductId && !$this->canMakeBooking && $this->bookingRestrictionMessage)
                     <div class="mb-6">
-                        <flux:text size="sm" class="text-amber-700 dark:text-amber-300">
+                        <flux:text size="sm" class="bg-accent-700 dark:bg-accent-300">
                             {{ $this->bookingRestrictionMessage }}
                         </flux:text>
                     </div>

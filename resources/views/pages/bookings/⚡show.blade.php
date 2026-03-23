@@ -460,7 +460,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
             @endif
 
             @if($this->isCreator() && $booking->canAcceptCounter())
-                <div class="rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-700 dark:bg-amber-950">
+                <div class="rounded-lg border border-amber-200 bg-accent-50 p-6 dark:border-amber-700 dark:bg-accent-950">
                     <flux:heading size="lg" class="mb-1">Awaiting Brand Response</flux:heading>
                     <flux:text class="mb-4 text-zinc-600 dark:text-zinc-400">
                         You sent a counter-offer of <strong>{{ $booking->formatAmount((float) $booking->counter_amount) }}</strong> to the brand.
@@ -557,7 +557,7 @@ new #[Layout('layouts::app'), Title('Booking Details')] class extends Component 
             @if($this->isCreator() && $booking->status === \App\Enums\BookingStatus::PENDING_PAYMENT && $booking->isCreatorInitiated())
                 @php $inviteToken = $booking->inviteTokens()->latest()->first(); @endphp
                 @if($inviteToken && $inviteToken->isValid())
-                    <div class="rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-700 dark:bg-amber-950">
+                    <div class="rounded-lg border border-amber-200 bg-accent-50 p-6 dark:border-amber-700 dark:bg-accent-950">
                         <flux:heading size="lg" class="mb-1">Awaiting Brand Payment</flux:heading>
                         <flux:text class="mb-4 text-zinc-600 dark:text-zinc-400">
                             Share the link below with the brand so they can complete the payment.

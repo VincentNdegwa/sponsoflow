@@ -202,7 +202,7 @@ new #[Layout('layouts::app'), Title('Marketplace')] class extends Component {
     <section class="rounded-3xl border border-accent-100 bg-gradient-to-br from-amber-50 via-white to-zinc-50 p-8 shadow-sm dark:border-zinc-800 dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-900">
         <div class="flex flex-wrap items-center justify-between gap-6">
             <div>
-                <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-amber-700 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-accent-100 px-3 py-1 text-xs font-semibold uppercase tracking-widest bg-accent-700 dark:border-amber-800 dark:bg-accent-900/40 dark:bg-accent-200">
                     Creator Marketplace
                 </div>
                 <flux:heading size="xl">Find campaign partnerships that fit your voice.</flux:heading>
@@ -274,7 +274,7 @@ new #[Layout('layouts::app'), Title('Marketplace')] class extends Component {
                         <div class="mt-auto pt-6">
                             @if($this->isCreator)
                                 @if($hasApplied)
-                                    <div class="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 dark:border-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
+                                    <div class="flex items-center justify-between rounded-lg border border-amber-200 bg-accent-50 px-3 py-2 text-xs font-semibold bg-accent-700 dark:border-amber-900 dark:bg-accent-900/30 dark:bg-accent-200">
                                         <span>Application {{ $application->status->label() }}</span>
                                         <flux:badge size="xs" :color="$application->status->badgeColor()">{{ $application->status->label() }}</flux:badge>
                                     </div>
@@ -351,9 +351,9 @@ new #[Layout('layouts::app'), Title('Marketplace')] class extends Component {
 
         <div class="mt-6 space-y-4">
             @if($this->selectedCampaign)
-                <div class="rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
+                <div class="rounded-lg border border-amber-100 bg-accent-50 p-4 text-sm bg-accent-900 dark:border-amber-900 dark:bg-accent-900/30 dark:bg-accent-100">
                     <div class="font-semibold">{{ $this->selectedCampaign->title }}</div>
-                    <div class="text-xs text-amber-700 dark:text-amber-200">{{ $this->selectedCampaign->workspace->name }}</div>
+                    <div class="text-xs bg-accent-700 dark:bg-accent-200">{{ $this->selectedCampaign->workspace->name }}</div>
                 </div>
             @endif
 
