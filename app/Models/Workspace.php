@@ -165,7 +165,10 @@ class Workspace extends Model
      */
     public function formatDate(\Carbon\CarbonInterface $date): string
     {
-        return $date->setTimezone($this->timezone)->format($this->date_format);
+        $timezone = $this->timezone ?: config('app.timezone');
+        $dateFormat = $this->date_format ?: 'M j, Y';
+
+        return $date->setTimezone($timezone)->format($dateFormat);
     }
 
     /**
@@ -173,7 +176,10 @@ class Workspace extends Model
      */
     public function formatTime(\Carbon\CarbonInterface $time): string
     {
-        return $time->setTimezone($this->timezone)->format($this->time_format);
+        $timezone = $this->timezone ?: config('app.timezone');
+        $timeFormat = $this->time_format ?: 'g:i A';
+
+        return $time->setTimezone($timezone)->format($timeFormat);
     }
 
     /**

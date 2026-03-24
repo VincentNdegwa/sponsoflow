@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\CampaignApplicationStatus;
 use App\Models\Campaign;
 use App\Models\CampaignApplication;
 use App\Models\Product;
@@ -11,7 +12,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Layout('layouts::app'), Title('Campaign Details')] class extends Component {
+new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends Component {
     public Campaign $campaign;
 
     public bool $showApplyModal = false;
@@ -155,97 +156,135 @@ new #[Layout('layouts::app'), Title('Campaign Details')] class extends Component
     }
 }; ?>
 
-<div class="space-y-8">
-    <div class="flex flex-wrap items-center justify-between gap-6">
-        <div>
-            <flux:breadcrumbs>
-                <flux:breadcrumbs.item href="{{ route('marketplace.index') }}">Marketplace</flux:breadcrumbs.item>
-                <flux:breadcrumbs.item>Campaigns</flux:breadcrumbs.item>
-            </flux:breadcrumbs>
-            <flux:heading size="xl" class="mt-3">{{ $campaign->title }}</flux:heading>
-            <flux:subheading>{{ $campaign->workspace->name }}</flux:subheading>
-        </div>
+<div class="mx-auto w-full max-w-6xl space-y-10 px-6 py-10">
+    @php
+        $deliverableCount = count($campaign->deliverables ?? []);
+        $brandContact = $campaign->workspace->owner;
+    @endphp
 
-        <div class="flex flex-wrap gap-2">
-            @if($this->isBrand && (int) $campaign->workspace_id === (int) $this->workspace?->id)
-                <flux:button variant="ghost" :href="route('campaigns.show', $campaign)" icon="arrow-top-right-on-square">
-                    Manage Campaign
-                </flux:button>
-            @endif
-            <flux:button variant="ghost" :href="route('marketplace.index')" icon="arrow-left">
-                Back to Marketplace
-            </flux:button>
-            @if($this->isCreator)
-                @if($this->creatorApplication)
-                    <flux:button variant="ghost" disabled>
-                        Applied: {{ $this->creatorApplication->status->label() }}
-                    </flux:button>
-                @elseif($campaign->status->value === 'paused')
-                    <flux:button variant="ghost" disabled>Applications Paused</flux:button>
-                @else
-                    <flux:button variant="primary" icon="paper-airplane" wire:click="openApplyModal">Apply</flux:button>
-                @endif
-            @endif
-        </div>
-    </div>
-
-    <div class="grid gap-4 md:grid-cols-4">
-        <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-            <flux:text class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Budget</flux:text>
-            <flux:heading size="lg">{{ formatMoney((float) $campaign->total_budget, $campaign->workspace) }}</flux:heading>
-        </div>
-        <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-            <flux:text class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Deliverables</flux:text>
-            <flux:heading size="lg">{{ count($campaign->deliverables ?? []) }}</flux:heading>
-        </div>
-        <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-            <flux:text class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Status</flux:text>
-            <flux:heading size="lg">{{ $campaign->status->label() }}</flux:heading>
-        </div>
-        <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-            <flux:text class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Brand Owner</flux:text>
-            <flux:heading size="lg">{{ $campaign->workspace->owner?->name ?? 'Team' }}</flux:heading>
-        </div>
-    </div>
-
-    <section class="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <div class="mb-4 flex items-center justify-between">
-            <flux:heading size="lg">Content Brief</flux:heading>
-            <flux:text size="sm" class="text-zinc-500">What the brand is asking for.</flux:text>
-        </div>
-
-        @php
-            $contentBrief = is_array($campaign->content_brief) ? $campaign->content_brief : [];
-        @endphp
-
-        @if(empty($contentBrief))
-            <div class="rounded-xl border border-dashed border-zinc-300 p-5 text-center text-sm text-zinc-500 dark:border-zinc-700">
-                No content brief provided yet.
+    <section class="border-b border-zinc-200 pb-8 dark:border-zinc-800">
+        <div class="flex flex-wrap items-start justify-between gap-6">
+            <div>
+                <flux:text class="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-500">Campaign brief</flux:text>
+                <flux:heading size="xl" class="font-serif">{{ $campaign->title }}</flux:heading>
+                <flux:subheading class="mt-2">{{ $campaign->workspace->name }}</flux:subheading>
+                <flux:text class="mt-3 max-w-2xl text-zinc-600 dark:text-zinc-400">
+                    Review the brief, confirm deliverables, and pitch your best-fit product.
+                </flux:text>
             </div>
-        @else
-            <div class="grid gap-4 md:grid-cols-2">
-                @foreach($contentBrief as $key => $value)
-                    @php
-                        $valueText = is_array($value)
-                            ? implode(', ', array_filter(array_map(fn ($item) => is_scalar($item) ? (string) $item : json_encode($item), $value)))
-                            : (string) $value;
-                    @endphp
-                    <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900">
-                        <flux:text class="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                            {{ Str::headline((string) $key) }}
+            <div class="w-full max-w-sm rounded-lg border border-zinc-200 p-5 dark:border-zinc-700">
+                <div class="flex items-center justify-between">
+                    <flux:text class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Status</flux:text>
+                    <flux:badge size="sm" :color="$campaign->status->badgeColor()" inset="top bottom">
+                        {{ $campaign->status->label() }}
+                    </flux:badge>
+                </div>
+                <div class="mt-4 grid gap-3 text-sm">
+                    <div class="flex items-center justify-between">
+                        <flux:text class="text-sm text-zinc-500">Budget</flux:text>
+                        <flux:text class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            {{ formatMoney((float) $campaign->total_budget, $campaign->workspace) }}
                         </flux:text>
-                        <flux:text class="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-                            {{ $valueText !== '' ? $valueText : 'Not specified.' }}
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <flux:text class="text-sm text-zinc-500">Deliverables</flux:text>
+                        <flux:text class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            {{ $deliverableCount }} {{ Str::plural('Deliverable', $deliverableCount) }}
+                        </flux:text>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <flux:text class="text-sm text-zinc-500">Brand Contact</flux:text>
+                        <flux:text class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            {{ $brandContact?->name ?? 'Team' }}
+                        </flux:text>
+                    </div>
+                    @if($brandContact?->email)
+                        <div class="flex items-center justify-between">
+                            <flux:text class="text-sm text-zinc-500">Email</flux:text>
+                            <flux:text class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                <a href="mailto:{{ $brandContact->email }}" class="hover:underline">
+                                    {{ $brandContact->email }}
+                                </a>
+                            </flux:text>
+                        </div>
+                    @endif
+                </div>
+
+                <div class="mt-5 flex flex-wrap gap-2">
+                    @if($this->isCreator)
+                        @if($this->creatorApplication)
+                            @if($brandContact?->email)
+                                <flux:button variant="primary" icon="envelope" :href="'mailto:'.$brandContact->email">
+                                    Message Brand
+                                </flux:button>
+                            @else
+                                <flux:button variant="ghost" disabled>Application received</flux:button>
+                            @endif
+                        @elseif($campaign->status->value === 'paused')
+                            <flux:button variant="ghost" disabled>Applications Paused</flux:button>
+                        @else
+                            <flux:button variant="primary" icon="paper-airplane" wire:click="openApplyModal" class="w-full">
+                                Submit Pitch
+                            </flux:button>
+                        @endif
+                    @endif
+
+                    @if($this->isBrand && (int) $campaign->workspace_id === (int) $this->workspace?->id)
+                        <flux:button variant="ghost" :href="route('campaigns.show', $campaign)">
+                            Manage Campaign
+                        </flux:button>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </section>
+
+    @if($this->isCreator && $this->creatorApplication)
+        @php
+            $applicationStatus = $this->creatorApplication->status;
+            $hasSlot = $this->creatorApplication->slot !== null;
+            $timelineSteps = [
+                ['label' => 'Pitch Sent', 'active' => true],
+                ['label' => 'In Review', 'active' => $applicationStatus !== CampaignApplicationStatus::Rejected],
+                ['label' => 'Booked', 'active' => $hasSlot],
+            ];
+        @endphp
+        <section class="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
+            <div class="flex items-center justify-between">
+                <flux:heading size="sm">Status Timeline</flux:heading>
+                <flux:badge size="sm" :color="$applicationStatus->badgeColor()">
+                    {{ $applicationStatus->label() }}
+                </flux:badge>
+            </div>
+            <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                @foreach($timelineSteps as $step)
+                    @php $isActive = $step['active']; @endphp
+                    <div class="flex items-center gap-2">
+                        <span class="h-2 w-2 rounded-full {{ $isActive ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-700' }}"></span>
+                        <flux:text class="text-sm {{ $isActive ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500' }}">
+                            {{ $step['label'] }}
                         </flux:text>
                     </div>
                 @endforeach
             </div>
-        @endif
-    </section>
 
-    <section class="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+            @if($applicationStatus === CampaignApplicationStatus::Rejected)
+                <flux:text class="mt-3 text-sm text-rose-600 dark:text-rose-300">
+                    Application not accepted. You can explore other briefs while you wait for new openings.
+                </flux:text>
+            @endif
+        </section>
+    @endif
+
+    <x-campaigns.brief-answers
+        :brief="$campaign->content_brief"
+        title="Creative Brief"
+        description="Project goals, target audience, and key messaging requirements."
+    />
+
+    <section class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
         <div class="mb-4 flex items-center justify-between">
-            <flux:heading size="lg">Deliverables</flux:heading>
+            <flux:heading size="lg">Scope of Work</flux:heading>
             <flux:text size="sm" class="text-zinc-500">Work the creator is expected to provide.</flux:text>
         </div>
 
@@ -254,7 +293,7 @@ new #[Layout('layouts::app'), Title('Campaign Details')] class extends Component
         @endphp
 
         @if(empty($deliverables))
-            <div class="rounded-xl border border-dashed border-zinc-300 p-5 text-center text-sm text-zinc-500 dark:border-zinc-700">
+            <div class="border border-dashed border-zinc-300 p-5 text-center text-sm text-zinc-500 dark:border-zinc-700">
                 No deliverables listed yet.
             </div>
         @else

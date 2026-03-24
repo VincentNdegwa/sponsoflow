@@ -105,7 +105,7 @@ test('marketplace blocks applying to paused campaigns', function () {
     ]);
 
     Livewire::test('pages::marketplace.index')
-        ->assertSee('Applications are paused.')
+        ->assertSee('Applications paused')
         ->set('applyCampaignId', $campaign->id)
         ->set('selectedProductId', $product->id)
         ->call('submitApplication')
