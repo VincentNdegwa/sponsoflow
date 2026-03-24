@@ -336,8 +336,8 @@ new #[Layout('layouts::app'), Title('Campaigns')] class extends Component {
                                 <flux:dropdown>
                                     <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
                                     <flux:menu>
-                                        <flux:menu.item :href="route('campaigns.show', $campaign->id)" icon="eye">View</flux:menu.item>
-                                        <flux:menu.item :href="route('campaigns.edit', $campaign->id)" icon="pencil-square">Edit</flux:menu.item>
+                                        <flux:menu.item :href="route('campaigns.show', $campaign)" icon="eye">View</flux:menu.item>
+                                        <flux:menu.item :href="route('campaigns.edit', $campaign)" icon="pencil-square">Edit</flux:menu.item>
                                         <flux:menu.separator />
                                         @if($campaign->status->value !== 'published')
                                             <flux:menu.item wire:click="openStatusModal({{ $campaign->id }}, 'publish')" icon="rocket-launch">Publish</flux:menu.item>

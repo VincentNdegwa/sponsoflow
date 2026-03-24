@@ -658,6 +658,7 @@ class BookingService
 
             return $this->successResponse([
                 'booking_id' => $booking->id,
+                'booking_uuid' => $booking->uuid,
                 'invite_url' => $inviteUrl,
                 'token' => $token->token,
             ]);

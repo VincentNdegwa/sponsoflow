@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CampaignApplicationStatus;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,14 +12,21 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class CampaignApplication extends Model
 {
     use HasFactory;
+    use HasUlids;
 
     protected $fillable = [
+        'uuid',
         'campaign_id',
         'creator_workspace_id',
         'product_id',
         'status',
         'notes',
     ];
+
+    public function uniqueIds(): array
+    {
+        return ['uuid'];
+    }
 
     protected function casts(): array
     {

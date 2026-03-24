@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CampaignSlotStatus;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,8 +12,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class CampaignSlot extends Model
 {
     use HasFactory;
+    use HasUlids;
 
     protected $fillable = [
+        'uuid',
         'campaign_id',
         'application_id',
         'creator_workspace_id',
@@ -21,6 +24,11 @@ class CampaignSlot extends Model
         'deliverables',
         'content_brief',
     ];
+
+    public function uniqueIds(): array
+    {
+        return ['uuid'];
+    }
 
     protected function casts(): array
     {

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Booking;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Str;
 use Livewire\Component;
@@ -62,11 +63,18 @@ new class extends Component {
         $notification->markAsRead();
 
         $bookingId = $notification->data['booking_id'] ?? null;
+        $bookingUuid = null;
+
+        if ($bookingId) {
+            $bookingUuid = Booking::query()
+                ->whereKey($bookingId)
+                ->value('uuid');
+        }
 
         $this->loadNotifications();
 
-        if ($bookingId) {
-            $this->redirect(route('bookings.show', $bookingId), navigate: true);
+        if ($bookingUuid) {
+            $this->redirect(route('bookings.show', $bookingUuid), navigate: true);
         }
     }
 
@@ -197,10 +205,13 @@ new class extends Component {
                 @php
                     $meta = $this->notificationMeta($notification['type']);
                     $bookingId = $notification['data']['booking_id'] ?? null;
+                    $bookingUuid = $bookingId
+                        ? Booking::query()->whereKey($bookingId)->value('uuid')
+                        : null;
                     $isRead = ! empty($notification['read_at']);
                 @endphp
                 <a
-                    href="{{ $bookingId ? route('bookings.show', $bookingId) : '#' }}"
+                    href="{{ $bookingUuid ? route('bookings.show', $bookingUuid) : '#' }}"
                     wire:click.prevent="markRead('{{ $notification['id'] }}')"
                     @click="$store.notifPanel.open = false"
                     class="flex items-start gap-4 border-b border-zinc-100 px-5 py-4 transition hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50 {{ $isRead ? 'opacity-60' : '' }}"

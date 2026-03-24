@@ -77,7 +77,7 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
     // Creator done state
     public bool $bookingCreated = false;
     public string $inviteUrl = '';
-    public int $createdBookingId = 0;
+    public string $createdBookingUuid = '';
     public bool $emailSent = false;
 
     // === Brand-initiated flow ===
@@ -395,7 +395,7 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
         if ($result['success']) {
             $this->bookingCreated = true;
             $this->inviteUrl = $result['invite_url'];
-            $this->createdBookingId = $result['booking_id'];
+            $this->createdBookingUuid = $result['booking_uuid'] ?? '';
             $this->step = 4;
         } else {
             $this->dispatch('error', $result['error']);
@@ -408,7 +408,9 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
             return;
         }
 
-        $booking = Booking::find($this->createdBookingId);
+        $booking = Booking::query()
+            ->where('uuid', $this->createdBookingUuid)
+            ->first();
 
         if (! $booking) {
             return;
@@ -853,7 +855,7 @@ new #[Layout('layouts::app'), Title('New Booking')] class extends Component {
                     @endif
 
                     <div class="flex justify-center gap-3">
-                        <flux:button :href="route('bookings.show', $createdBookingId)" variant="primary" icon="eye">
+                        <flux:button :href="route('bookings.show', $createdBookingUuid)" variant="primary" icon="eye">
                             View Booking
                         </flux:button>
                         <flux:button :href="route('bookings.index')" variant="ghost">

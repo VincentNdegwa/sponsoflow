@@ -247,7 +247,11 @@ new #[Layout('layouts::app'), Title('Marketplace')] class extends Component {
                     <div wire:key="marketplace-campaign-{{ $campaign->id }}" class="group flex h-full flex-col rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-amber-200 hover:shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <flux:heading size="md" class="mb-1">{{ $campaign->title }}</flux:heading>
+                                <flux:heading size="md" class="mb-1">
+                                    <a href="{{ route('marketplace.campaigns.show', $campaign) }}" class="hover:underline">
+                                        {{ $campaign->title }}
+                                    </a>
+                                </flux:heading>
                                 <flux:text class="text-sm text-zinc-500">{{ $campaign->workspace->name }}</flux:text>
                             </div>
                             <flux:badge size="sm" :color="$campaign->status->badgeColor()" inset="top bottom">
@@ -272,6 +276,9 @@ new #[Layout('layouts::app'), Title('Marketplace')] class extends Component {
                         </div>
 
                         <div class="mt-auto pt-6">
+                            <flux:button variant="ghost" class="mb-3 w-full" :href="route('marketplace.campaigns.show', $campaign)" icon="eye">
+                                View Details
+                            </flux:button>
                             @if($this->isCreator)
                                 @if($hasApplied)
                                     <div class="flex items-center justify-between rounded-lg border border-amber-200 bg-accent-50 px-3 py-2 text-xs font-semibold bg-accent-700 dark:border-amber-900 dark:bg-accent-900/30 dark:bg-accent-200">
@@ -337,7 +344,7 @@ new #[Layout('layouts::app'), Title('Marketplace')] class extends Component {
                                     <span class="font-semibold text-zinc-900 dark:text-zinc-100">{{ count($campaign->deliverables ?? []) }}</span>
                                 </div>
                             </div>
-                            <flux:button variant="ghost" class="mt-5 w-full" :href="route('campaigns.edit', $campaign->id)">Edit Campaign</flux:button>
+                            <flux:button variant="ghost" class="mt-5 w-full" :href="route('campaigns.edit', $campaign)">Edit Campaign</flux:button>
                         </div>
                     @endforeach
                 </div>

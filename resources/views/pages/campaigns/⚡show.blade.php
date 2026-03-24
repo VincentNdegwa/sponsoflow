@@ -231,7 +231,7 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
         try {
             $booking = app(MarketplaceService::class)->approveApplicationAndCreateBooking($application);
             $this->dispatch('success', 'Application approved. A booking has been created for creator confirmation.');
-            $this->redirect(route('bookings.show', $booking->id));
+            $this->redirect(route('bookings.show', $booking));
         } catch (\Throwable $exception) {
             $this->dispatch('error', $exception->getMessage());
         }
@@ -288,7 +288,7 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
             <flux:dropdown>
                 <flux:button variant="ghost" icon="ellipsis-horizontal">Actions</flux:button>
                 <flux:menu>
-                    <flux:menu.item :href="route('campaigns.edit', $campaign->id)" icon="pencil-square">Edit Campaign</flux:menu.item>
+                    <flux:menu.item :href="route('campaigns.edit', $campaign)" icon="pencil-square">Edit Campaign</flux:menu.item>
                     <flux:menu.separator />
                     @if($campaign->status->value !== 'published')
                         <flux:menu.item wire:click="openStatusModal('publish')" icon="rocket-launch">Publish</flux:menu.item>
@@ -368,7 +368,7 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
                             </flux:table.cell>
                             <flux:table.cell>
                                 @if($slot->booking)
-                                    <flux:button variant="ghost" size="sm" :href="route('bookings.show', $slot->booking->id)">View Booking</flux:button>
+                                    <flux:button variant="ghost" size="sm" :href="route('bookings.show', $slot->booking)">View Booking</flux:button>
                                 @else
                                     <flux:text size="sm" class="text-zinc-500">Pending booking</flux:text>
                                 @endif
@@ -434,7 +434,7 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
                         <flux:table.cell>
                             <div class="flex justify-end gap-2">
                                 @if($booking)
-                                    <flux:button variant="ghost" size="sm" :href="route('bookings.show', $booking->id)">View Booking</flux:button>
+                                    <flux:button variant="ghost" size="sm" :href="route('bookings.show', $booking)">View Booking</flux:button>
                                 @endif
 
                                 @if($application->status === CampaignApplicationStatus::Submitted)

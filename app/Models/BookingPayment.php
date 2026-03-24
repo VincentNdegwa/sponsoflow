@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\BookingStatus;
 use App\Services\ExchangeRateService;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,8 +13,10 @@ use Illuminate\Support\Facades\Log;
 class BookingPayment extends Model
 {
     use HasFactory;
+    use HasUlids;
 
     protected $fillable = [
+        'uuid',
         'booking_id',
         'provider',
         'provider_transaction_id',
@@ -36,6 +39,11 @@ class BookingPayment extends Model
         'failure_reason',
         'refund_reason',
     ];
+
+    public function uniqueIds(): array
+    {
+        return ['uuid'];
+    }
 
     protected function casts(): array
     {
