@@ -37,6 +37,7 @@ class CampaignFactory extends Factory
             'workspace_id' => Workspace::factory()->brand(),
             'template_id' => CampaignTemplate::factory(),
             'title' => fake()->sentence(4),
+            'description' => fake()->sentence(12),
             'total_budget' => 5000,
             'content_brief' => [
                 'pitch' => fake()->sentence(12),
@@ -45,6 +46,7 @@ class CampaignFactory extends Factory
             'deliverables' => $deliverables,
             'status' => CampaignStatus::Draft,
             'is_public' => false,
+            'posted_at' => now(),
         ];
     }
 }

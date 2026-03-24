@@ -124,6 +124,7 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
             contentBrief: (array) ($this->campaign->content_brief ?? []),
             deliverables: (array) ($this->campaign->deliverables ?? []),
             title: $this->campaign->title,
+            description: $this->campaign->description,
             isPublic: $isPublic,
             status: $status,
         );
@@ -149,6 +150,7 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
             contentBrief: (array) ($this->campaign->content_brief ?? []),
             deliverables: (array) ($this->campaign->deliverables ?? []),
             title: $this->campaign->title,
+            description: $this->campaign->description,
             isPublic: $isPublic,
             status: $this->campaign->status,
         );

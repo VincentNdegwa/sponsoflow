@@ -21,11 +21,13 @@ class Campaign extends Model
         'workspace_id',
         'template_id',
         'title',
+        'description',
         'total_budget',
         'content_brief',
         'deliverables',
         'status',
         'is_public',
+        'posted_at',
     ];
 
     public function uniqueIds(): array
@@ -46,6 +48,7 @@ class Campaign extends Model
             'deliverables' => 'array',
             'status' => CampaignStatus::class,
             'is_public' => 'boolean',
+            'posted_at' => 'datetime',
         ];
     }
 

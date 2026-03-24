@@ -122,6 +122,7 @@ new #[Layout('layouts::app'), Title('Campaigns')] class extends Component {
             contentBrief: (array) ($campaign->content_brief ?? []),
             deliverables: (array) ($campaign->deliverables ?? []),
             title: $campaign->title,
+            description: $campaign->description,
             isPublic: $isPublic,
             status: $status,
         );
@@ -147,6 +148,7 @@ new #[Layout('layouts::app'), Title('Campaigns')] class extends Component {
             contentBrief: (array) ($campaign->content_brief ?? []),
             deliverables: (array) ($campaign->deliverables ?? []),
             title: $campaign->title,
+            description: $campaign->description,
             isPublic: $isPublic,
             status: $campaign->status,
         );

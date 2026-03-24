@@ -88,9 +88,18 @@ new #[Layout('layouts::marketplace'), Title('Marketplace')] class extends Compon
         }
 
         return CampaignApplication::query()
+            ->with(['campaign.slots' => function ($query) use ($workspace) {
+                $query->where('creator_workspace_id', $workspace->id);
+            }])
             ->where('creator_workspace_id', $workspace->id)
             ->whereIn('campaign_id', $campaignIds)
             ->get()
+            ->map(function (CampaignApplication $application) {
+                $hasSlot = $application->campaign?->slots?->isNotEmpty();
+                $application->display_status = $hasSlot ? 'Booked' : $application->status->label();
+
+                return $application;
+            })
             ->keyBy('campaign_id');
     }
 
@@ -204,9 +213,9 @@ new #[Layout('layouts::marketplace'), Title('Marketplace')] class extends Compon
         <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,240px)]">
             <div>
                 <flux:text class="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-500">Explore Opportunities</flux:text>
-                <flux:heading size="xl" class="font-serif">Brand Opportunities</flux:heading>
+                <flux:heading size="xl" class="font-serif">Campaign Marketplace</flux:heading>
                 <flux:text class="mt-2 max-w-2xl text-zinc-600 dark:text-zinc-400">
-                    Browse open briefs from brands and pitch your services.
+                    Discover open briefs, review project requirements, and pitch your best-fit products to brands.
                 </flux:text>
             </div>
             <div class="flex items-end justify-start lg:justify-end">
@@ -238,78 +247,13 @@ new #[Layout('layouts::marketplace'), Title('Marketplace')] class extends Compon
                 @foreach($this->campaigns as $campaign)
                     @php
                         $application = $this->creatorApplications->get($campaign->id);
-                        $hasApplied = $application !== null;
-                        $applicationsPaused = $campaign->status->value === 'paused';
-                        $pitch = is_array($campaign->content_brief) ? ($campaign->content_brief['pitch'] ?? null) : null;
-                        $deliverableCount = count($campaign->deliverables ?? []);
                     @endphp
-                    <article wire:key="marketplace-campaign-{{ $campaign->id }}" class="group flex h-full flex-col rounded-lg border border-zinc-200 bg-white p-6 transition-all hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900">
-                        <div class="flex items-start justify-between gap-3">
-                            <div class="space-y-2">
-                                <div class="flex items-center gap-2">
-                                    <flux:badge size="sm" :color="$campaign->status->badgeColor()" inset="top bottom">
-                                        {{ $campaign->status->label() }}
-                                    </flux:badge>
-                                </div>
-                                <flux:heading size="md" class="font-semibold">
-                                    <a href="{{ route('marketplace.campaigns.show', $campaign) }}" class="hover:underline">
-                                        {{ $campaign->title }}
-                                    </a>
-                                </flux:heading>
-                                <flux:text class="text-xs text-zinc-500">Posted by: {{ $campaign->workspace->name }}</flux:text>
-                            </div>
-                            <flux:button variant="ghost" size="sm" icon="arrow-top-right-on-square" :href="route('marketplace.campaigns.show', $campaign)" />
-                        </div>
-
-                        <flux:text class="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-                            {{ $pitch ? Str::limit($pitch, 120) : 'Brief summary coming soon. Check deliverables for scope.' }}
-                        </flux:text>
-
-                        <div class="mt-5 grid grid-cols-2 gap-3 text-sm">
-                            <div class="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950">
-                                <flux:text class="text-xs uppercase tracking-wide text-zinc-500">Budget</flux:text>
-                                <flux:text class="mt-1 font-semibold text-zinc-900 dark:text-zinc-100">
-                                    {{ formatMoney((float) $campaign->total_budget, $campaign->workspace) }}
-                                </flux:text>
-                            </div>
-                            <div class="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950">
-                                <flux:text class="text-xs uppercase tracking-wide text-zinc-500">Deliverables</flux:text>
-                                <flux:text class="mt-1 font-semibold text-zinc-900 dark:text-zinc-100">
-                                    {{ $deliverableCount }} {{ Str::plural('Deliverable', $deliverableCount) }}
-                                </flux:text>
-                            </div>
-                        </div>
-
-                        <div class="mt-5 flex items-center justify-between text-xs text-zinc-500">
-                            <span>Posted by: {{ $campaign->workspace->name }}</span>
-                            <span>Posted on: {{ formatWorkspaceDate($campaign->created_at) }}</span>
-                        </div>
-
-                        <div class="mt-6 flex items-center justify-between gap-3">
-                            @if($this->isCreator)
-                                @if($hasApplied)
-                                    <div class="flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 dark:border-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
-                                        <span>Applied</span>
-                                        <flux:badge size="xs" :color="$application->status->badgeColor()">{{ $application->status->label() }}</flux:badge>
-                                    </div>
-                                @elseif($applicationsPaused)
-                                    <div class="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800">
-                                        Applications paused
-                                    </div>
-                                @else
-                                    <flux:button variant="primary" size="sm" wire:click="openApplyModal({{ $campaign->id }})" icon="paper-airplane">
-                                        Apply
-                                    </flux:button>
-                                @endif
-                            @else
-                                <flux:text class="text-xs text-zinc-500">Creators can apply.</flux:text>
-                            @endif
-
-                            <a href="{{ route('marketplace.campaigns.show', $campaign) }}" class="text-xs font-semibold uppercase tracking-wide text-amber-700 hover:text-amber-800 dark:text-amber-200">
-                                View Details
-                            </a>
-                        </div>
-                    </article>
+                    <x-marketplace.campaign-card
+                        :campaign="$campaign"
+                        :application="$application"
+                        :is-creator="$this->isCreator"
+                        wire:key="marketplace-campaign-{{ $campaign->id }}"
+                    />
                 @endforeach
             </div>
 
@@ -322,42 +266,25 @@ new #[Layout('layouts::marketplace'), Title('Marketplace')] class extends Compon
     @if($this->isBrand)
         <section class="space-y-6">
             <div>
-                <flux:heading size="lg">How your campaigns appear</flux:heading>
-                <flux:text class="text-sm text-zinc-500">Here is how your public campaigns show up to creators.</flux:text>
+                <flux:heading size="lg">Creator Preview</flux:heading>
+                <flux:text class="text-sm text-zinc-500">Preview how your public briefs appear to creators.</flux:text>
             </div>
 
             @if($this->brandCampaignPreviews->isEmpty())
                 <div class="rounded-lg border border-dashed border-zinc-300 bg-white p-10 text-center dark:border-zinc-700 dark:bg-zinc-800">
                     <flux:heading size="md">No public campaigns yet</flux:heading>
                     <flux:text class="mt-2 text-zinc-500">Publish a campaign to see it here.</flux:text>
-                    <flux:button variant="primary" class="mt-5" :href="route('campaigns.index')">Manage Campaigns</flux:button>
+                    <flux:button variant="primary" class="mt-5" :href="route('campaigns.index')" target="_blank" rel="noopener">Manage Campaigns</flux:button>
                 </div>
             @else
                 <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                     @foreach($this->brandCampaignPreviews as $campaign)
-                        <div wire:key="brand-campaign-preview-{{ $campaign->id }}" class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <flux:heading size="md" class="mb-1">{{ $campaign->title }}</flux:heading>
-                                    <flux:text class="text-sm text-zinc-500">{{ $campaign->workspace->name }}</flux:text>
-                                </div>
-                                <flux:badge size="sm" color="blue" inset="top bottom">Public</flux:badge>
-                            </div>
-                            <div class="mt-4 grid gap-3 text-sm">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-zinc-500">Budget</span>
-                                    <span class="font-semibold text-zinc-900 dark:text-zinc-100">{{ formatMoney((float) $campaign->total_budget, $campaign->workspace) }}</span>
-                                </div>
-                                @php $brandDeliverableCount = count($campaign->deliverables ?? []); @endphp
-                                <div class="flex items-center justify-between">
-                                    <span class="text-zinc-500">Deliverables</span>
-                                    <span class="font-semibold text-zinc-900 dark:text-zinc-100">
-                                        {{ $brandDeliverableCount }} {{ Str::plural('Deliverable', $brandDeliverableCount) }}
-                                    </span>
-                                </div>
-                            </div>
-                            <flux:button variant="ghost" class="mt-5 w-full" :href="route('campaigns.edit', $campaign)">Edit Campaign</flux:button>
-                        </div>
+                        <x-marketplace.campaign-card
+                            :campaign="$campaign"
+                            :is-creator="true"
+                            :preview-mode="true"
+                            wire:key="brand-campaign-preview-{{ $campaign->id }}"
+                        />
                     @endforeach
                 </div>
             @endif
@@ -389,7 +316,7 @@ new #[Layout('layouts::marketplace'), Title('Marketplace')] class extends Compon
 
             <flux:field>
                 <flux:label>Pitch (optional)</flux:label>
-                <flux:textarea wire:model="pitch" rows="4" placeholder="Share why your audience is a great fit for this campaign." />
+                <flux:textarea wire:model="pitch" rows="4" placeholder="Share a quick pitch for the brand." />
                 <flux:error name="pitch" />
             </flux:field>
 
@@ -404,7 +331,7 @@ new #[Layout('layouts::marketplace'), Title('Marketplace')] class extends Compon
             <flux:button variant="ghost" wire:click="closeApplyModal">Cancel</flux:button>
             <flux:spacer />
             <flux:button variant="primary" icon="paper-airplane" wire:click="submitApplication">
-                Send Application
+                Send Pitch
             </flux:button>
         </div>
     </flux:modal>

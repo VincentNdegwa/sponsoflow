@@ -23,6 +23,7 @@ class CampaignService
         array $contentBrief,
         array $deliverables,
         ?string $title = null,
+        ?string $description = null,
         bool $isPublic = false,
         CampaignStatus $status = CampaignStatus::Draft,
     ): Campaign {
@@ -34,16 +35,20 @@ class CampaignService
 
         $normalizedDeliverables = $this->normalizeDeliverables($deliverables);
 
-        return DB::transaction(function () use ($brandWorkspace, $template, $contentBrief, $normalizedDeliverables, $title, $isPublic, $status) {
+        return DB::transaction(function () use ($brandWorkspace, $template, $contentBrief, $normalizedDeliverables, $title, $description, $isPublic, $status) {
+            $shouldPost = $isPublic && in_array($status->value, ['published', 'paused'], true);
+
             return Campaign::query()->create([
                 'workspace_id' => $brandWorkspace->id,
                 'template_id' => $template?->id,
                 'title' => $title ?: 'New Campaign',
+                'description' => $description,
                 'total_budget' => $this->calculateTotalBudget($normalizedDeliverables),
                 'content_brief' => $contentBrief,
                 'deliverables' => $normalizedDeliverables,
                 'status' => $status,
                 'is_public' => $isPublic,
+                'posted_at' => $shouldPost ? now() : null,
             ]);
         });
     }
@@ -54,6 +59,7 @@ class CampaignService
         array $contentBrief,
         array $deliverables,
         ?string $title = null,
+        ?string $description = null,
         ?bool $isPublic = null,
         ?CampaignStatus $status = null,
     ): Campaign {
@@ -69,15 +75,25 @@ class CampaignService
 
         $normalizedDeliverables = $this->normalizeDeliverables($deliverables);
 
-        return DB::transaction(function () use ($campaign, $template, $contentBrief, $normalizedDeliverables, $title, $isPublic, $status) {
+        return DB::transaction(function () use ($campaign, $template, $contentBrief, $normalizedDeliverables, $title, $description, $isPublic, $status) {
+            $nextStatus = $status ?? $campaign->status;
+            $nextIsPublic = $isPublic ?? $campaign->is_public;
+            $postedAt = $campaign->posted_at;
+
+            if (! $postedAt && $nextIsPublic && in_array($nextStatus->value, ['published', 'paused'], true)) {
+                $postedAt = now();
+            }
+
             $campaign->update([
                 'template_id' => $template?->id,
                 'title' => $title ?: $campaign->title,
+                'description' => $description ?? $campaign->description,
                 'total_budget' => $this->calculateTotalBudget($normalizedDeliverables),
                 'content_brief' => $contentBrief,
                 'deliverables' => $normalizedDeliverables,
-                'status' => $status?->value ?? $campaign->status,
-                'is_public' => $isPublic ?? $campaign->is_public,
+                'status' => $nextStatus->value,
+                'is_public' => $nextIsPublic,
+                'posted_at' => $postedAt,
             ]);
 
             return $campaign->refresh();

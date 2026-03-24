@@ -14,6 +14,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
     public ?int $campaignId = null;
     public ?int $templateId = null;
     public string $title = '';
+    public string $description = '';
     public bool $isPublic = false;
 
     public array $briefFields = [];
@@ -51,6 +52,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
         $this->campaignId = $existingCampaign->id;
         $this->templateId = $existingCampaign->template_id;
         $this->title = (string) $existingCampaign->title;
+        $this->description = (string) ($existingCampaign->description ?? '');
         $this->isPublic = (bool) $existingCampaign->is_public;
 
         $schemaFields = (array) data_get($existingCampaign->content_brief, '_form_schema.sections.0.fields', []);
@@ -373,6 +375,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
         $this->validate([
             'templateId' => 'nullable|integer|exists:campaign_templates,id',
             'title' => 'required|string|min:3|max:150',
+            'description' => 'nullable|string|max:500',
             'briefFields' => 'required|array|min:1',
             'briefFields.*.key' => 'required|string|min:2|max:120|regex:/^[a-zA-Z_][a-zA-Z0-9_]*$/',
             'briefFields.*.label' => 'required|string|min:2|max:120',
@@ -459,6 +462,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
                 contentBrief: $contentBriefPayload,
                 deliverables: $this->deliverables?? [],
                 title: $this->title,
+                description: $this->description !== '' ? $this->description : null,
                 isPublic: $this->isPublic,
                 status: $campaign->status,
             );
@@ -474,6 +478,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
             contentBrief: $contentBriefPayload,
             deliverables: $this->deliverables,
             title: $this->title,
+            description: $this->description !== '' ? $this->description : null,
             isPublic: $this->isPublic,
         );
 
@@ -682,6 +687,14 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
                     <flux:label>Campaign Title</flux:label>
                     <flux:input wire:model.blur="title" placeholder="e.g. Q2 Sneaker Launch" />
                     <flux:error name="title" />
+                </flux:field>
+            </div>
+
+            <div class="mt-4">
+                <flux:field>
+                    <flux:label>Campaign Description</flux:label>
+                    <flux:textarea wire:model.blur="description" rows="3" placeholder="Short summary shown to creators in the marketplace." />
+                    <flux:error name="description" />
                 </flux:field>
             </div>
 

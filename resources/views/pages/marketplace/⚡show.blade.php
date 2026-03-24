@@ -24,7 +24,7 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
     {
         $workspace = currentWorkspace();
 
-        if (! $workspace) {
+        if (!$workspace) {
             abort(403);
         }
 
@@ -36,7 +36,7 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
             return;
         }
 
-        if (! $campaign->is_public || ! in_array($campaign->status->value, ['published', 'paused'], true)) {
+        if (!$campaign->is_public || !in_array($campaign->status->value, ['published', 'paused'], true)) {
             abort(404);
         }
 
@@ -52,13 +52,13 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
     #[Computed]
     public function isCreator(): bool
     {
-        return (bool) ($this->workspace?->isCreator());
+        return (bool) $this->workspace?->isCreator();
     }
 
     #[Computed]
     public function isBrand(): bool
     {
-        return (bool) ($this->workspace?->isBrand());
+        return (bool) $this->workspace?->isBrand();
     }
 
     #[Computed]
@@ -66,7 +66,7 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
     {
         $workspace = $this->workspace;
 
-        if (! $workspace || ! $workspace->isCreator()) {
+        if (!$workspace || !$workspace->isCreator()) {
             return Product::query()->whereRaw('1 = 0')->get();
         }
 
@@ -78,19 +78,16 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
     {
         $workspace = $this->workspace;
 
-        if (! $workspace || ! $workspace->isCreator()) {
+        if (!$workspace || !$workspace->isCreator()) {
             return null;
         }
 
-        return CampaignApplication::query()
-            ->where('campaign_id', $this->campaign->id)
-            ->where('creator_workspace_id', $workspace->id)
-            ->first();
+        return CampaignApplication::query()->where('campaign_id', $this->campaign->id)->where('creator_workspace_id', $workspace->id)->first();
     }
 
     public function openApplyModal(): void
     {
-        if (! $this->isCreator) {
+        if (!$this->isCreator) {
             return;
         }
 
@@ -111,7 +108,7 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
 
     public function submitApplication(): void
     {
-        if (! $this->isCreator) {
+        if (!$this->isCreator) {
             return;
         }
 
@@ -122,13 +119,9 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
 
         $workspace = $this->workspace;
         $campaign = $this->campaign;
-        $product = Product::query()
-            ->where('workspace_id', $workspace?->id)
-            ->where('is_active', true)
-            ->where('is_public', true)
-            ->find($this->selectedProductId);
+        $product = Product::query()->where('workspace_id', $workspace?->id)->where('is_active', true)->where('is_public', true)->find($this->selectedProductId);
 
-        if (! $workspace || ! $product) {
+        if (!$workspace || !$product) {
             $this->applyError = 'Please double-check your selection and try again.';
 
             return;
@@ -141,12 +134,7 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
         }
 
         try {
-            app(MarketplaceService::class)->submitCreatorApplication(
-                campaign: $campaign,
-                creatorWorkspace: $workspace,
-                product: $product,
-                pitch: $this->pitch !== '' ? $this->pitch : null,
-            );
+            app(MarketplaceService::class)->submitCreatorApplication(campaign: $campaign, creatorWorkspace: $workspace, product: $product, pitch: $this->pitch !== '' ? $this->pitch : null);
 
             $this->closeApplyModal();
             $this->dispatch('success', 'Application submitted! The brand will review and respond soon.');
@@ -165,7 +153,8 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
     <section class="border-b border-zinc-200 pb-8 dark:border-zinc-800">
         <div class="flex flex-wrap items-start justify-between gap-6">
             <div>
-                <flux:text class="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-500">Campaign brief</flux:text>
+                <flux:text class="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-500">Campaign brief
+                </flux:text>
                 <flux:heading size="xl" class="font-serif">{{ $campaign->title }}</flux:heading>
                 <flux:subheading class="mt-2">{{ $campaign->workspace->name }}</flux:subheading>
                 <flux:text class="mt-3 max-w-2xl text-zinc-600 dark:text-zinc-400">
@@ -198,38 +187,24 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
                             {{ $brandContact?->name ?? 'Team' }}
                         </flux:text>
                     </div>
-                    @if($brandContact?->email)
-                        <div class="flex items-center justify-between">
-                            <flux:text class="text-sm text-zinc-500">Email</flux:text>
-                            <flux:text class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                                <a href="mailto:{{ $brandContact->email }}" class="hover:underline">
-                                    {{ $brandContact->email }}
-                                </a>
-                            </flux:text>
-                        </div>
-                    @endif
+                   
                 </div>
 
                 <div class="mt-5 flex flex-wrap gap-2">
-                    @if($this->isCreator)
-                        @if($this->creatorApplication)
-                            @if($brandContact?->email)
-                                <flux:button variant="primary" icon="envelope" :href="'mailto:'.$brandContact->email">
-                                    Message Brand
-                                </flux:button>
-                            @else
-                                <flux:button variant="ghost" disabled>Application received</flux:button>
-                            @endif
+                    @if ($this->isCreator)
+                        @if ($this->creatorApplication)
+                            <flux:button variant="ghost" disabled>Application received</flux:button>
                         @elseif($campaign->status->value === 'paused')
                             <flux:button variant="ghost" disabled>Applications Paused</flux:button>
                         @else
-                            <flux:button variant="primary" icon="paper-airplane" wire:click="openApplyModal" class="w-full">
+                            <flux:button variant="primary" icon="paper-airplane" wire:click="openApplyModal"
+                                class="w-full">
                                 Submit Pitch
                             </flux:button>
                         @endif
                     @endif
 
-                    @if($this->isBrand && (int) $campaign->workspace_id === (int) $this->workspace?->id)
+                    @if ($this->isBrand && (int) $campaign->workspace_id === (int) $this->workspace?->id)
                         <flux:button variant="ghost" :href="route('campaigns.show', $campaign)">
                             Manage Campaign
                         </flux:button>
@@ -239,7 +214,7 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
         </div>
     </section>
 
-    @if($this->isCreator && $this->creatorApplication)
+    @if ($this->isCreator && $this->creatorApplication)
         @php
             $applicationStatus = $this->creatorApplication->status;
             $hasSlot = $this->creatorApplication->slot !== null;
@@ -257,18 +232,20 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
                 </flux:badge>
             </div>
             <div class="mt-4 grid gap-3 sm:grid-cols-3">
-                @foreach($timelineSteps as $step)
+                @foreach ($timelineSteps as $step)
                     @php $isActive = $step['active']; @endphp
                     <div class="flex items-center gap-2">
-                        <span class="h-2 w-2 rounded-full {{ $isActive ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-700' }}"></span>
-                        <flux:text class="text-sm {{ $isActive ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500' }}">
+                        <span
+                            class="h-2 w-2 rounded-full {{ $isActive ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-700' }}"></span>
+                        <flux:text
+                            class="text-sm {{ $isActive ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500' }}">
                             {{ $step['label'] }}
                         </flux:text>
                     </div>
                 @endforeach
             </div>
 
-            @if($applicationStatus === CampaignApplicationStatus::Rejected)
+            @if ($applicationStatus === CampaignApplicationStatus::Rejected)
                 <flux:text class="mt-3 text-sm text-rose-600 dark:text-rose-300">
                     Application not accepted. You can explore other briefs while you wait for new openings.
                 </flux:text>
@@ -276,24 +253,23 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
         </section>
     @endif
 
-    <x-campaigns.brief-answers
-        :brief="$campaign->content_brief"
-        title="Creative Brief"
-        description="Project goals, target audience, and key messaging requirements."
-    />
+    <x-campaigns.brief-answers :brief="$campaign->content_brief" title="Creative Brief"
+        description="Project goals, target audience, and key messaging requirements." />
 
     <section class="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
-        <div class="mb-4 flex items-center justify-between">
-            <flux:heading size="lg">Scope of Work</flux:heading>
-            <flux:text size="sm" class="text-zinc-500">Work the creator is expected to provide.</flux:text>
-        </div>
-
         @php
             $deliverables = is_array($campaign->deliverables) ? $campaign->deliverables : [];
         @endphp
+        <div class="mb-6 flex items-center justify-between">
+                <flux:heading size="lg">Scope of Work</flux:heading>
+                <flux:text size="sm" class="text-zinc-500">Review the required content and quantities for this
+                    project.</flux:text>
+        </div>
 
-        @if(empty($deliverables))
-            <div class="border border-dashed border-zinc-300 p-5 text-center text-sm text-zinc-500 dark:border-zinc-700">
+
+        @if (empty($deliverables))
+            <div
+                class="border border-dashed border-zinc-300 p-5 text-center text-sm text-zinc-500 dark:border-zinc-700">
                 No deliverables listed yet.
             </div>
         @else
@@ -306,7 +282,7 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
                 </flux:table.columns>
 
                 <flux:table.rows>
-                    @foreach($deliverables as $deliverable)
+                    @foreach ($deliverables as $deliverable)
                         @php
                             $label = data_get($deliverable, 'label', 'Deliverable');
                             $quantity = data_get($deliverable, 'qty', data_get($deliverable, 'quantity', 1));
@@ -338,7 +314,8 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
         <flux:text class="mt-2 text-zinc-500">Choose your product and share a quick pitch for the brand.</flux:text>
 
         <div class="mt-6 space-y-4">
-            <div class="rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
+            <div
+                class="rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
                 <div class="font-semibold">{{ $campaign->title }}</div>
                 <div class="text-xs text-amber-700 dark:text-amber-200">{{ $campaign->workspace->name }}</div>
             </div>
@@ -347,8 +324,9 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
                 <flux:label>Select product *</flux:label>
                 <flux:select wire:model.live="selectedProductId">
                     <option value="">Choose a product</option>
-                    @foreach($this->creatorProducts as $product)
-                        <option value="{{ $product->id }}">{{ $product->name }} • {{ formatMoney((float) $product->base_price, $this->workspace) }}</option>
+                    @foreach ($this->creatorProducts as $product)
+                        <option value="{{ $product->id }}">{{ $product->name }} •
+                            {{ formatMoney((float) $product->base_price, $this->workspace) }}</option>
                     @endforeach
                 </flux:select>
                 <flux:error name="selectedProductId" />
@@ -356,12 +334,14 @@ new #[Layout('layouts::marketplace'), Title('Campaign Details')] class extends C
 
             <flux:field>
                 <flux:label>Pitch (optional)</flux:label>
-                <flux:textarea wire:model="pitch" rows="4" placeholder="Share why your audience is a great fit for this campaign." />
+                <flux:textarea wire:model="pitch" rows="4"
+                    placeholder="Share why your audience is a great fit for this campaign." />
                 <flux:error name="pitch" />
             </flux:field>
 
-            @if($applyError)
-                <div class="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-900/30 dark:text-rose-100">
+            @if ($applyError)
+                <div
+                    class="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-900/30 dark:text-rose-100">
                     {{ $applyError }}
                 </div>
             @endif
