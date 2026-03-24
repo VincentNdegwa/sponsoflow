@@ -78,7 +78,7 @@ test('bookings index prompts for rating after approving work and stores rating',
     session(['current_workspace_id' => $brandWorkspace->id]);
 
     Livewire::test('pages::bookings.index')
-        ->call('confirmApproveWork', $booking->id)
+        ->call('confirmApproveWork', $booking->uuid)
         ->call('approveWork')
         ->assertSet('showRatingPrompt', true)
         ->call('setRating', 4)
