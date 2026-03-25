@@ -19,7 +19,9 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
     public string $search = '';
     public string $statusFilter = '';
     public bool $showRejectModal = false;
+    public bool $showApproveModal = false;
     public ?int $selectedApplicationId = null;
+    public ?int $selectedApproveApplicationId = null;
     public string $rejectionReason = '';
     public bool $showStatusModal = false;
     public bool $showVisibilityModal = false;
@@ -76,7 +78,7 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
     }
 
     #[Computed]
-    public function slots(): \Illuminate\Database\Eloquent\Collection
+    public function campaignSlots(): \Illuminate\Database\Eloquent\Collection
     {
         return $this->campaign
             ->slots()
@@ -89,6 +91,23 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
     {
         $this->pendingStatusAction = $action;
         $this->showStatusModal = true;
+    }
+
+    public function openApproveModal(int $applicationId): void
+    {
+        $this->selectedApproveApplicationId = $applicationId;
+        $this->showApproveModal = true;
+    }
+
+    public function confirmApproveApplication(): void
+    {
+        if (! $this->selectedApproveApplicationId) {
+            return;
+        }
+
+        $this->approveApplication($this->selectedApproveApplicationId);
+        $this->showApproveModal = false;
+        $this->selectedApproveApplicationId = null;
     }
 
     public function openVisibilityModal(string $action): void
@@ -340,7 +359,7 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
             <flux:text size="sm" class="text-zinc-500">Approved applications become slots.</flux:text>
         </div>
 
-        @if(count($this->slots) === 0)
+        @if(count($this->campaignSlots) === 0)
             <div class="rounded-xl border border-dashed border-zinc-300 p-5 text-center text-sm text-zinc-500 dark:border-zinc-700">
                 No slots created yet. Approve an application to create one.
             </div>
@@ -354,7 +373,7 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
                 </flux:table.columns>
 
                 <flux:table.rows>
-                    @foreach($this->slots as $slot)
+                    @foreach($this->campaignSlots as $slot)
                         <flux:table.row :key="$slot->id">
                             <flux:table.cell>
                                 <div class="flex flex-col">
@@ -434,15 +453,23 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
                             </flux:badge>
                         </flux:table.cell>
                         <flux:table.cell>
-                            <div class="flex justify-end gap-2">
-                                @if($booking)
-                                    <flux:button variant="ghost" size="sm" :href="route('bookings.show', $booking)">View Booking</flux:button>
-                                @endif
+                            <div class="flex justify-end">
+                                <flux:dropdown>
+                                    <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
+                                    <flux:menu>
+                                        @if($booking)
+                                            <flux:menu.item :href="route('bookings.show', $booking)" icon="eye">View Booking</flux:menu.item>
+                                            <flux:menu.separator />
+                                        @endif
 
-                                @if($application->status === CampaignApplicationStatus::Submitted)
-                                    <flux:button variant="primary" size="sm" wire:click="approveApplication({{ $application->id }})">Approve</flux:button>
-                                    <flux:button variant="danger" size="sm" wire:click="openRejectModal({{ $application->id }})">Reject</flux:button>
-                                @endif
+                                        @if($application->status === CampaignApplicationStatus::Submitted)
+                                            <flux:menu.item wire:click="openApproveModal({{ $application->id }})" icon="check">Approve</flux:menu.item>
+                                            <flux:menu.item wire:click="openRejectModal({{ $application->id }})" icon="x-mark">Reject</flux:menu.item>
+                                        @else
+                                            <flux:menu.item disabled icon="check">No actions available</flux:menu.item>
+                                        @endif
+                                    </flux:menu>
+                                </flux:dropdown>
                             </div>
                         </flux:table.cell>
                     </flux:table.row>
@@ -468,6 +495,15 @@ new #[Layout('layouts::app'), Title('Campaign Applications')] class extends Comp
             <flux:button variant="danger" wire:click="rejectApplication">Confirm Reject</flux:button>
         </div>
     </flux:modal>
+
+    <x-campaigns.action-confirm-modal
+        model="showApproveModal"
+        title="Approve Application"
+        description="Approving creates a booking and notifies the creator to confirm."
+        confirm-action="confirmApproveApplication"
+        confirm-label="Approve"
+        confirm-variant="primary"
+    />
 
     <x-campaigns.confirm-modal
         model="showStatusModal"

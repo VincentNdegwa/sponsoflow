@@ -90,9 +90,6 @@
                 </div>
             @else
                 @if($previewMode)
-                    <flux:button variant="primary" size="sm" icon="paper-airplane" disabled>
-                        Apply
-                    </flux:button>
                 @else
                     <flux:button variant="primary" size="sm" wire:click="openApplyModal({{ $campaign->id }})" icon="paper-airplane">
                         Apply

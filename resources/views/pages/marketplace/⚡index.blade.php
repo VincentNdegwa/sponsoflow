@@ -266,8 +266,8 @@ new #[Layout('layouts::marketplace'), Title('Marketplace')] class extends Compon
     @if($this->isBrand)
         <section class="space-y-6">
             <div>
-                <flux:heading size="lg">Creator Preview</flux:heading>
-                <flux:text class="text-sm text-zinc-500">Preview how your public briefs appear to creators.</flux:text>
+                <flux:heading size="lg">Live Briefs</flux:heading>
+                <flux:text class="text-sm text-zinc-500">See your briefs as they appear in the marketplace.</flux:text>
             </div>
 
             @if($this->brandCampaignPreviews->isEmpty())

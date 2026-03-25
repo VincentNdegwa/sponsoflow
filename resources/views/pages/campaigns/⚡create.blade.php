@@ -22,7 +22,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
     public array $contentBrief = [];
     public array $deliverables = [];
 
-    public function mount(?int $campaign = null): void
+    public function mount(?Campaign $campaign = null): void
     {
         $workspace = currentWorkspace();
 
@@ -44,18 +44,17 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
             return;
         }
 
-        $existingCampaign = Campaign::query()
-            ->where('id', $campaign)
-            ->where('workspace_id', $workspace->id)
-            ->firstOrFail();
+        if ((int) $campaign->workspace_id !== (int) $workspace->id) {
+            abort(404);
+        }
 
-        $this->campaignId = $existingCampaign->id;
-        $this->templateId = $existingCampaign->template_id;
-        $this->title = (string) $existingCampaign->title;
-        $this->description = (string) ($existingCampaign->description ?? '');
-        $this->isPublic = (bool) $existingCampaign->is_public;
+        $this->campaignId = $campaign->id;
+        $this->templateId = $campaign->template_id;
+        $this->title = (string) $campaign->title;
+        $this->description = (string) ($campaign->description ?? '');
+        $this->isPublic = (bool) $campaign->is_public;
 
-        $schemaFields = (array) data_get($existingCampaign->content_brief, '_form_schema.sections.0.fields', []);
+        $schemaFields = (array) data_get($campaign->content_brief, '_form_schema.sections.0.fields', []);
 
         if ($schemaFields !== []) {
             $this->briefFields = [];
@@ -80,11 +79,11 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
 
                 $this->briefFieldOptionsInput[] = implode(', ', $options);
 
-                $this->contentBrief[$name] = (string) data_get($existingCampaign->content_brief, $name, '');
+                $this->contentBrief[$name] = (string) data_get($campaign->content_brief, $name, '');
             }
         }
 
-        $existingDeliverables = (array) ($existingCampaign->deliverables ?? []);
+        $existingDeliverables = (array) ($campaign->deliverables ?? []);
 
         if ($existingDeliverables !== []) {
             $this->deliverables = [];
@@ -785,7 +784,7 @@ new #[Layout('layouts::app'), Title('Create Campaign')] class extends Component 
                                             <flux:label>{{ $fieldLabel }}</flux:label>
 
                                             @if($fieldType === 'select')
-                                                <flux:select wire:model.blur="deliverables.{{ $index }}.fields.{{ $fieldKey }}">
+                                                <flux:select wire:model.live="deliverables.{{ $index }}.fields.{{ $fieldKey }}">
                                                     <option value="">Select an option</option>
                                                     @foreach((array) data_get($field, 'options', []) as $optionValue)
                                                         <option value="{{ $optionValue }}">{{ $optionValue }}</option>

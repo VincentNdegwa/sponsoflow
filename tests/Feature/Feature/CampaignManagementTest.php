@@ -1,10 +1,13 @@
 <?php
 
+use App\Enums\CampaignSlotStatus;
 use App\Enums\CampaignStatus;
 use App\Models\Campaign;
+use App\Models\CampaignSlot;
 use App\Models\CampaignTemplate;
 use App\Models\Category;
 use App\Models\DeliverableOption;
+use App\Models\Product;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\CampaignCategoryService;
@@ -21,9 +24,12 @@ function actingBrandContext(): array
     $workspace = Workspace::factory()->brand()->create([
         'owner_id' => $user->id,
         'currency' => 'USD',
+        'onboarding_completed' => true,
+        'onboarding_completed_at' => now(),
     ]);
 
     test()->actingAs($user);
+    Livewire::actingAs($user);
     app()->instance('current.workspace', $workspace);
     session(['current_workspace_id' => $workspace->id]);
 
@@ -316,11 +322,11 @@ test('campaign create page shows only workspace owned templates', function () {
         'name' => 'Global Template',
     ]);
 
-    $component = Livewire::test('pages::campaigns.create');
-
-    $availableTemplates = $component->instance()->availableTemplates();
-
-    expect($availableTemplates->pluck('id')->all())->toBe([$workspaceTemplate->id]);
+    test()
+        ->get(route('campaigns.create'))
+        ->assertOk()
+        ->assertSee($workspaceTemplate->name)
+        ->assertDontSee('Global Template');
 });
 
 test('campaign show page status actions update campaign state', function () {
@@ -387,4 +393,33 @@ test('campaign show page visibility action toggles public flag', function () {
 
     expect($campaign->is_public)->toBeFalse()
         ->and($campaign->status)->toBe(CampaignStatus::Published);
+});
+
+test('campaign show page lists campaign slots', function () {
+    [, $workspace] = actingBrandContext();
+
+    $campaign = Campaign::factory()->create([
+        'workspace_id' => $workspace->id,
+    ]);
+
+    $creatorWorkspace = Workspace::factory()->creator()->create();
+    $product = Product::factory()->create([
+        'workspace_id' => $creatorWorkspace->id,
+        'is_active' => true,
+        'is_public' => true,
+    ]);
+
+    CampaignSlot::query()->create([
+        'campaign_id' => $campaign->id,
+        'application_id' => null,
+        'creator_workspace_id' => $creatorWorkspace->id,
+        'product_id' => $product->id,
+        'status' => CampaignSlotStatus::Pending,
+        'deliverables' => $campaign->deliverables,
+        'content_brief' => $campaign->content_brief,
+    ]);
+
+    Livewire::test('pages::campaigns.show', ['campaign' => $campaign])
+        ->assertDontSee('No slots created yet')
+        ->assertSee($creatorWorkspace->name);
 });
