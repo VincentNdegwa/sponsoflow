@@ -56,8 +56,18 @@ function createPaystackBookingContext(): array
 
 test('it tracks paystack fee breakdown when payment is confirmed', function () {
     config()->set('services.paystack.secret_key', 'sk_test_key');
+    config()->set('currency.default_provider', null);
 
     [$booking] = createPaystackBookingContext();
+
+    ExchangeRate::create([
+        'base_currency' => 'NGN',
+        'target_currency' => 'USD',
+        'rate' => 0.00062,
+        'provider' => 'seeded-fallback',
+        'effective_date' => now()->toDateString(),
+        'fetched_at' => now(),
+    ]);
 
     BookingPayment::createForBooking($booking, 'paystack', [
         'provider_reference' => 're4lyvq3s3',
