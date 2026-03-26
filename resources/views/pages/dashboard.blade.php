@@ -15,7 +15,7 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
 
     public function setCreatorRevenueCurrency(string $currency): void
     {
-        if (! in_array($currency, ['local', 'usd'], true)) {
+        if (!in_array($currency, ['local', 'usd'], true)) {
             return;
         }
 
@@ -45,7 +45,7 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
     {
         $workspace = $this->workspace;
 
-        if (! $workspace) {
+        if (!$workspace) {
             return [
                 [
                     'label' => 'Total Spent',
@@ -82,15 +82,9 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
                 ->whereIn('booking_payments.status', ['completed', 'refunded'])
                 ->get();
 
-            $pendingPayoutStatuses = [
-                BookingStatus::CONFIRMED->value,
-                BookingStatus::PROCESSING->value,
-                BookingStatus::REVISION_REQUESTED->value,
-            ];
+            $pendingPayoutStatuses = [BookingStatus::CONFIRMED->value, BookingStatus::PROCESSING->value, BookingStatus::REVISION_REQUESTED->value];
 
-            $availableBalanceStatuses = [
-                BookingStatus::COMPLETED->value,
-            ];
+            $availableBalanceStatuses = [BookingStatus::COMPLETED->value];
 
             $resolveMoney = function (BookingPayment $payment, string $localKey): float {
                 if ($this->isCreatorUsdView) {
@@ -98,35 +92,27 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
                         return (float) ($payment->amount_usd ?? 0);
                     }
 
-                    return (float) data_get($payment->amount_breakdown, 'usd.'.$localKey, 0);
+                    return (float) data_get($payment->amount_breakdown, 'usd.' . $localKey, 0);
                 }
 
                 if ($localKey === 'gross_amount') {
                     return (float) $payment->amount;
                 }
 
-                return (float) data_get($payment->amount_breakdown, 'local.'.$localKey, 0);
+                return (float) data_get($payment->amount_breakdown, 'local.' . $localKey, 0);
             };
 
             $completedPayments = $financialPayments->where('status', 'completed');
 
-            $totalEarnings = $completedPayments
-                ->sum(fn (BookingPayment $payment): float => $resolveMoney($payment, 'gross_amount'));
+            $totalEarnings = $completedPayments->sum(fn(BookingPayment $payment): float => $resolveMoney($payment, 'gross_amount'));
 
-            $totalFees = $completedPayments
-                ->sum(fn (BookingPayment $payment): float => $resolveMoney($payment, 'platform_fee_amount'));
+            $totalFees = $completedPayments->sum(fn(BookingPayment $payment): float => $resolveMoney($payment, 'platform_fee_amount'));
 
-            $pendingPayout = $completedPayments
-                ->whereIn('booking_status', $pendingPayoutStatuses)
-                ->whereNull('creator_released_at')
-                ->sum(fn (BookingPayment $payment): float => $resolveMoney($payment, 'creator_payout_amount'));
+            $pendingPayout = $completedPayments->whereIn('booking_status', $pendingPayoutStatuses)->whereNull('creator_released_at')->sum(fn(BookingPayment $payment): float => $resolveMoney($payment, 'creator_payout_amount'));
 
-            $availableBalance = $completedPayments
-                ->whereIn('booking_status', $availableBalanceStatuses)
-                ->whereNull('creator_released_at')
-                ->sum(fn (BookingPayment $payment): float => $resolveMoney($payment, 'creator_payout_amount'));
+            $availableBalance = $completedPayments->whereIn('booking_status', $availableBalanceStatuses)->whereNull('creator_released_at')->sum(fn(BookingPayment $payment): float => $resolveMoney($payment, 'creator_payout_amount'));
 
-            $displayCurrency = $this->isCreatorUsdView ? 'USD' : ($workspace->currency ?? 'USD');
+            $displayCurrency = $this->isCreatorUsdView ? 'USD' : $workspace->currency ?? 'USD';
 
             return [
                 [
@@ -157,9 +143,7 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
         }
 
         $base = Booking::where('brand_workspace_id', $workspace->id);
-        $payments = BookingPayment::query()
-            ->where('status', 'completed')
-            ->whereHas('booking', fn ($query) => $query->where('brand_workspace_id', $workspace->id));
+        $payments = BookingPayment::query()->where('status', 'completed')->whereHas('booking', fn($query) => $query->where('brand_workspace_id', $workspace->id));
 
         return [
             [
@@ -194,12 +178,13 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
     {
         $workspace = $this->workspace;
 
-        if (! $workspace) {
+        if (!$workspace) {
             return collect();
         }
 
         if ($this->isCreator) {
-            return $workspace->bookings()
+            return $workspace
+                ->bookings()
                 ->with(['product', 'brandUser', 'brandWorkspace', 'latestPayment'])
                 ->latest()
                 ->limit(6)
@@ -219,50 +204,39 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
         $workspace = $this->workspace;
         $isCreator = $this->isCreator;
 
-        if (! $workspace) {
-            return collect(range(5, 0))->map(fn ($i) => [
-                'label' => Carbon::now()->subMonths($i)->format('M'),
-                'count' => 0,
-                'revenue' => 0.0,
-            ])->toArray();
+        if (!$workspace) {
+            return collect(range(5, 0))
+                ->map(
+                    fn($i) => [
+                        'label' => Carbon::now()->subMonths($i)->format('M'),
+                        'count' => 0,
+                        'revenue' => 0.0,
+                    ],
+                )
+                ->toArray();
         }
 
-        return collect(range(5, 0))->map(function ($i) use ($workspace, $isCreator) {
-            $month = Carbon::now()->subMonths($i);
+        return collect(range(5, 0))
+            ->map(function ($i) use ($workspace, $isCreator) {
+                $month = Carbon::now()->subMonths($i);
 
-            if ($isCreator) {
-                $count = $workspace->bookings()
-                    ->whereMonth('created_at', $month->month)
-                    ->whereYear('created_at', $month->year)
-                    ->count();
-                $payments = BookingPayment::query()
-                    ->where('status', 'completed')
-                    ->whereMonth('paid_at', $month->month)
-                    ->whereYear('paid_at', $month->year)
-                    ->whereHas('booking', fn ($query) => $query->where('workspace_id', $workspace->id));
+                if ($isCreator) {
+                    $count = $workspace->bookings()->whereMonth('created_at', $month->month)->whereYear('created_at', $month->year)->count();
+                    $payments = BookingPayment::query()->where('status', 'completed')->whereMonth('paid_at', $month->month)->whereYear('paid_at', $month->year)->whereHas('booking', fn($query) => $query->where('workspace_id', $workspace->id));
 
-                $revenue = $this->isCreatorUsdView
-                    ? (float) (clone $payments)->sum('amount_usd')
-                    : (float) (clone $payments)->sum('amount');
-            } else {
-                $count = Booking::where('brand_workspace_id', $workspace->id)
-                    ->whereMonth('created_at', $month->month)
-                    ->whereYear('created_at', $month->year)
-                    ->count();
-                $revenue = (float) BookingPayment::query()
-                    ->where('status', 'completed')
-                    ->whereMonth('paid_at', $month->month)
-                    ->whereYear('paid_at', $month->year)
-                    ->whereHas('booking', fn ($query) => $query->where('brand_workspace_id', $workspace->id))
-                    ->sum('amount_usd');
-            }
+                    $revenue = $this->isCreatorUsdView ? (float) (clone $payments)->sum('amount_usd') : (float) (clone $payments)->sum('amount');
+                } else {
+                    $count = Booking::where('brand_workspace_id', $workspace->id)->whereMonth('created_at', $month->month)->whereYear('created_at', $month->year)->count();
+                    $revenue = (float) BookingPayment::query()->where('status', 'completed')->whereMonth('paid_at', $month->month)->whereYear('paid_at', $month->year)->whereHas('booking', fn($query) => $query->where('brand_workspace_id', $workspace->id))->sum('amount_usd');
+                }
 
-            return [
-                'label' => $month->format('M'),
-                'count' => $count,
-                'revenue' => $revenue,
-            ];
-        })->toArray();
+                return [
+                    'label' => $month->format('M'),
+                    'count' => $count,
+                    'revenue' => $revenue,
+                ];
+            })
+            ->toArray();
     }
 
     #[Computed]
@@ -270,13 +244,11 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
     {
         $workspace = $this->workspace;
 
-        if (! $workspace) {
+        if (!$workspace) {
             return [];
         }
 
-        $query = $this->isCreator
-            ? $workspace->bookings()
-            : Booking::where('brand_workspace_id', $workspace->id);
+        $query = $this->isCreator ? $workspace->bookings() : Booking::where('brand_workspace_id', $workspace->id);
 
         $total = (clone $query)->count();
 
@@ -284,27 +256,24 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
             return [];
         }
 
-        return collect([
-            BookingStatus::COMPLETED,
-            BookingStatus::PROCESSING,
-            BookingStatus::CONFIRMED,
-            BookingStatus::INQUIRY,
-            BookingStatus::REVISION_REQUESTED,
-            BookingStatus::DISPUTED,
-        ])->map(function ($status) use ($query, $total) {
-            $count = (clone $query)->where('status', $status)->count();
+        return collect([BookingStatus::COMPLETED, BookingStatus::PROCESSING, BookingStatus::CONFIRMED, BookingStatus::INQUIRY, BookingStatus::REVISION_REQUESTED, BookingStatus::DISPUTED])
+            ->map(function ($status) use ($query, $total) {
+                $count = (clone $query)->where('status', $status)->count();
 
-            if ($count === 0) {
-                return null;
-            }
+                if ($count === 0) {
+                    return null;
+                }
 
-            return [
-                'label' => $status->label(),
-                'color' => $status->badgeColor(),
-                'count' => $count,
-                'pct' => round(($count / $total) * 100),
-            ];
-        })->filter()->values()->toArray();
+                return [
+                    'label' => $status->label(),
+                    'color' => $status->badgeColor(),
+                    'count' => $count,
+                    'pct' => round(($count / $total) * 100),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->toArray();
     }
 }; ?>
 
@@ -325,19 +294,14 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
         </div>
 
         @if ($this->isCreator)
-            <div class="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-900">
-                <flux:button
-                    wire:click="setCreatorRevenueCurrency('local')"
-                    size="sm"
-                    :variant="$this->isCreatorUsdView ? 'ghost' : 'primary'"
-                >
+            <div
+                class="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-900">
+                <flux:button wire:click="setCreatorRevenueCurrency('local')" size="sm"
+                    :variant="$this->isCreatorUsdView ? 'ghost' : 'primary'">
                     Local
                 </flux:button>
-                <flux:button
-                    wire:click="setCreatorRevenueCurrency('usd')"
-                    size="sm"
-                    :variant="$this->isCreatorUsdView ? 'primary' : 'ghost'"
-                >
+                <flux:button wire:click="setCreatorRevenueCurrency('usd')" size="sm"
+                    :variant="$this->isCreatorUsdView ? 'primary' : 'ghost'">
                     USD
                 </flux:button>
             </div>
@@ -348,14 +312,19 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
                 <flux:button variant="ghost" size="sm" :href="route('bookings.index')" wire:navigate>
                     All Bookings
                 </flux:button>
-                <flux:button variant="primary" size="sm" icon="plus" :href="route('products.create')" wire:navigate>
+                <flux:button variant="primary" size="sm" icon="plus" :href="route('products.create')"
+                    wire:navigate>
                     New Product
                 </flux:button>
             @else
-                <flux:button variant="ghost" size="sm" :href="route('bookings.index')" wire:navigate>
+                <flux:button variant="ghost" size="sm" :href="route('campaigns.index')" wire:navigate>
                     All Campaigns
                 </flux:button>
-                <flux:button variant="primary" size="sm" icon="plus" :href="route('bookings.create')" wire:navigate>
+                <flux:button variant="ghost" size="sm" :href="route('bookings.index')" wire:navigate>
+                    All Bookings
+                </flux:button>
+                <flux:button variant="primary" size="sm" icon="plus" :href="route('bookings.create')"
+                    wire:navigate>
                     New Booking
                 </flux:button>
             @endif
@@ -367,7 +336,8 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
             <div class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
                 <div class="mb-4 flex items-center justify-between">
                     <span class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ $stat['label'] }}</span>
-                    <div class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
+                    <div
+                        class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
                         <flux:icon :icon="$stat['icon']" class="size-4 text-zinc-500 dark:text-zinc-400" />
                     </div>
                 </div>
@@ -410,7 +380,7 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
                                     <div
                                         class="flex size-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                                         @if ($this->isCreator)
-                                            {{ strtoupper(substr($booking->guest_name ?? $booking->brandUser?->name ?? '?', 0, 1)) }}
+                                            {{ strtoupper(substr($booking->guest_name ?? ($booking->brandUser?->name ?? '?'), 0, 1)) }}
                                         @else
                                             {{ strtoupper(substr($booking->product?->name ?? '?', 0, 1)) }}
                                         @endif
@@ -418,7 +388,7 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
                                     <div class="min-w-0">
                                         <div class="truncate text-sm font-medium text-zinc-900 dark:text-white">
                                             @if ($this->isCreator)
-                                                {{ $booking->guest_name ?? $booking->brandUser?->name ?? $booking->guest_email ?? 'Guest' }}
+                                                {{ $booking->guest_name ?? ($booking->brandUser?->name ?? ($booking->guest_email ?? 'Guest')) }}
                                             @else
                                                 {{ $booking->product?->name ?? 'Booking' }}
                                             @endif
@@ -547,7 +517,8 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
                 @if ($ratingCount > 0)
                     <div class="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
                         <flux:heading size="sm" class="mb-1">Your Rating</flux:heading>
-                        <flux:text class="mb-4 text-xs text-zinc-400">Based on {{ $ratingCount }} review{{ $ratingCount !== 1 ? 's' : '' }}</flux:text>
+                        <flux:text class="mb-4 text-xs text-zinc-400">Based on {{ $ratingCount }}
+                            review{{ $ratingCount !== 1 ? 's' : '' }}</flux:text>
                         <div class="flex items-end gap-2">
                             <span class="text-4xl font-semibold tracking-tight text-zinc-900 dark:text-white">
                                 {{ number_format($avgRating, 1) }}
@@ -556,8 +527,7 @@ new #[Layout('layouts::app'), Title('Dashboard')] class extends Component {
                         </div>
                         <div class="mt-2 flex gap-0.5">
                             @for ($i = 1; $i <= 5; $i++)
-                                <flux:icon
-                                    icon="{{ $i <= round($avgRating) ? 'star' : 'star' }}"
+                                <flux:icon icon="{{ $i <= round($avgRating) ? 'star' : 'star' }}"
                                     class="size-4 {{ $i <= round($avgRating) ? 'text-accent' : 'text-zinc-300 dark:text-zinc-600' }}" />
                             @endfor
                         </div>

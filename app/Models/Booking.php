@@ -217,7 +217,8 @@ class Booking extends Model
 
     public function canProceedInquiryPayment(): bool
     {
-        return $this->isInquiry() && $this->status === BookingStatus::PENDING_PAYMENT;
+        return in_array($this->type, [BookingType::INQUIRY, BookingType::MARKETPLACE_APPLICATION], true)
+            && $this->status === BookingStatus::PENDING_PAYMENT;
     }
 
     public function canCreatorApproveMarketplaceApplication(): bool

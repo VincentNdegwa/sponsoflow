@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\BookingStatus;
+use App\Enums\BookingType;
 use App\Enums\CampaignSlotStatus;
 use App\Enums\CampaignStatus;
 use App\Models\Booking;
@@ -307,6 +308,19 @@ test('fulfillInquiryBooking updates requirement_data and changes status to pendi
 
 test('pending payment inquiry without submission can proceed to payment but cannot be approved as submitted work', function () {
     $this->booking->update([
+        'status' => BookingStatus::PENDING_PAYMENT,
+    ]);
+
+    $fresh = $this->booking->fresh();
+
+    expect($fresh->canProceedInquiryPayment())->toBeTrue()
+        ->and($fresh->canApprove())->toBeFalse()
+        ->and($fresh->canReviewSubmittedWork())->toBeFalse();
+});
+
+test('pending payment marketplace booking can proceed to payment', function () {
+    $this->booking->update([
+        'type' => BookingType::MARKETPLACE_APPLICATION,
         'status' => BookingStatus::PENDING_PAYMENT,
     ]);
 
