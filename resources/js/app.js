@@ -1,7 +1,9 @@
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
+import ApexCharts from 'apexcharts';
 
 window.Pusher = Pusher;
+window.ApexCharts = ApexCharts;
 
 document.addEventListener('alpine:init', () => {
     Alpine.store('notifPanel', {
