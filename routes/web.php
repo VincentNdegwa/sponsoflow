@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminAuthenticatedSessionController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\StripeConnectController;
@@ -36,6 +37,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('dashboard', 'pages::dashboard')->name('dashboard');
+});
+
+// Admin routes
+Route::prefix('admin')->name('admin.')->group(function () {
+    Route::middleware('guest:admin')->group(function () {
+        Route::get('/login', [AdminAuthenticatedSessionController::class, 'create'])->name('login');
+        Route::post('/login', [AdminAuthenticatedSessionController::class, 'store'])->name('login.store');
+    });
+
+    Route::middleware(['admin.access'])->group(function () {
+        Route::post('/logout', [AdminAuthenticatedSessionController::class, 'destroy'])->name('logout');
+        Route::livewire('/', 'pages::admin.dashboard')->name('dashboard');
+        Route::livewire('/users', 'pages::admin.users')->name('users');
+        Route::livewire('/users/{user}', 'pages::admin.users.show')->name('users.show');
+    });
 });
 
 require __DIR__.'/settings.php';

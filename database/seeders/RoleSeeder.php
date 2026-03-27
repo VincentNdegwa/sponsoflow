@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Role;
+use Illuminate\Database\Seeder;
 
 class RoleSeeder extends Seeder
 {
@@ -16,7 +16,7 @@ class RoleSeeder extends Seeder
         ]);
 
         $creatorManager = Role::firstOrCreate([
-            'name' => 'creator-manager', 
+            'name' => 'creator-manager',
             'display_name' => 'Creator Manager',
             'description' => 'Can manage inventory, approve brands, and submit proof',
         ]);
@@ -29,8 +29,14 @@ class RoleSeeder extends Seeder
 
         $brandContributor = Role::firstOrCreate([
             'name' => 'brand-contributor',
-            'display_name' => 'Brand Contributor', 
+            'display_name' => 'Brand Contributor',
             'description' => 'Can upload ad assets only',
+        ]);
+
+        $systemAdmin = Role::firstOrCreate([
+            'name' => 'system-admin',
+            'display_name' => 'System Admin',
+            'description' => 'Full access to the admin panel',
         ]);
 
         $creatorOwner->syncPermissions([

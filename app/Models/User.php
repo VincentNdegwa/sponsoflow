@@ -156,4 +156,9 @@ class User extends Authenticatable implements LaratrustUser
     {
         return route('creator.show', $this->public_slug ?: $this->generateSlug());
     }
+
+    public function isSystemAdmin(): bool
+    {
+        return $this->hasRole('system-admin');
+    }
 }

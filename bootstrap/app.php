@@ -16,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
             App\Http\Middleware\WorkspaceMiddlware::class,
             App\Http\Middleware\EnsureOnboardingCompleted::class,
         ]);
+
+        $middleware->alias([
+            'admin.access' => App\Http\Middleware\AdminAccessMiddleware::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

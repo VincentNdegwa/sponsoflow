@@ -14,11 +14,12 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             DeliverableOptionsSeeder::class,
             CampaignDefaultsSeeder::class,
+            AdminUserSeeder::class,
         ]);
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        //
+        //        User::factory()->create([
+        //            'name' => 'Test User',
+        //            'email' => 'test@example.com',
+        //        ]);
     }
 }
