@@ -1,17 +1,50 @@
 <?php
 
 use App\Livewire\Concerns\HandlesPaystackPaymentSetup;
+use App\Services\PaymentService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\Attributes\Computed;
 
 new #[Title('Creator Onboarding')] class extends Component {
-    use HandlesPaystackPaymentSetup;
+    use HandlesPaystackPaymentSetup {
+        createPaymentAccount as createPaystackPaymentAccount;
+    }
+
+    public array $availableProviders = [
+        'stripe' => 'Stripe',
+        'paystack' => 'Paystack',
+    ];
+
+    public bool $is_connecting = false;
 
     public function mount(): void
     {
-        $this->initializePaystackPaymentSetup();
+        $this->provider = 'stripe';
+    }
+
+    public function updatedProvider(): void
+    {
+        if ($this->provider === 'paystack') {
+            $this->initializePaystackPaymentSetup();
+
+            return;
+        }
+
+        $this->is_connecting = false;
+    }
+
+    public function createPaymentAccount(): void
+    {
+        if ($this->provider === 'paystack') {
+            $this->createPaystackPaymentAccount();
+
+            return;
+        }
+
+        $this->connectStripeAccount();
     }
 
     public function skipPaymentSetup(): void
@@ -45,6 +78,77 @@ new #[Title('Creator Onboarding')] class extends Component {
     {
         $this->completeOnboarding();
     }
+
+    protected function connectStripeAccount(): void
+    {
+        $this->is_connecting = true;
+
+        try {
+            $workspace = $this->getCurrentWorkspace();
+
+            if (! $workspace) {
+                throw new \Exception('No workspace found.');
+            }
+
+            $paymentService = app(PaymentService::class);
+            $config = $workspace->paymentConfigurations()
+                ->where('provider', 'stripe')
+                ->first();
+            $onboardingUrl = null;
+
+            if ($config && $config->provider_account_id) {
+                $onboardingUrl = $paymentService->getOnboardingUrl($config);
+            } else {
+                $response = $paymentService->createConnectAccount($workspace, 'stripe', []);
+                $onboardingUrl = $response['onboarding_url'] ?? null;
+            }
+
+            if ($onboardingUrl) {
+                $this->redirect($onboardingUrl, true);
+
+                return;
+            }
+
+            session()->flash('status', 'Stripe account connected successfully.');
+        } catch (\Throwable $exception) {
+            Log::error('Failed to connect Stripe account', [
+                'user_id' => Auth::id(),
+                'provider' => 'stripe',
+                'error' => $exception->getMessage(),
+            ]);
+
+            session()->flash('error', $this->resolveStripeErrorMessage($exception->getMessage()));
+        } finally {
+            $this->is_connecting = false;
+        }
+    }
+
+    protected function resolveStripeErrorMessage(string $message): string
+    {
+        $lowerMessage = strtolower($message);
+
+        if (str_contains($lowerMessage, 'signed up for connect')) {
+            return 'Stripe Connect is not enabled for this account yet. Visit https://dashboard.stripe.com/connect to enable Connect, then try again.';
+        }
+
+        return 'Failed to connect Stripe account: '.$message;
+    }
+
+    #[Computed]
+    public function isStripeVerified(): bool
+    {
+        $workspace = $this->getCurrentWorkspace();
+
+        if (! $workspace) {
+            return false;
+        }
+
+        $config = $workspace->paymentConfigurations()
+            ->where('provider', 'stripe')
+            ->first();
+
+        return (bool) ($config && $config->is_verified);
+    }
 }; ?>
 
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 backdrop-blur-xs">
@@ -62,12 +166,18 @@ new #[Title('Creator Onboarding')] class extends Component {
         </div>
 
         <div class="max-h-[70vh] overflow-y-auto p-6">
-            @if($this->provider === 'paystack')
-                @include('livewire.onboarding.providers.paystack')
+            <div class="mb-6">
+                <flux:select wire:model.live="provider" label="Payment Provider" placeholder="Choose a provider" required>
+                    @foreach ($availableProviders as $key => $label)
+                        <flux:select.option value="{{ $key }}">{{ $label }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+            </div>
+
+            @if ($this->provider === 'stripe')
+                @include('livewire.onboarding.providers.stripe')
             @else
-                <div class="rounded-md border border-amber-200 bg-accent-50 p-4">
-                    <flux:text class="bg-accent-700">Selected provider is not supported in onboarding yet.</flux:text>
-                </div>
+                @include('livewire.onboarding.providers.paystack')
             @endif
         </div>
 

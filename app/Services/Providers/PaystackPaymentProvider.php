@@ -2,19 +2,12 @@
 
 namespace App\Services\Providers;
 
-use App\Enums\BookingStatus;
-use App\Enums\CampaignSlotStatus;
-use App\Enums\SlotStatus;
 use App\Models\Booking;
 use App\Models\BookingPayment;
-use App\Models\ExchangeRate;
 use App\Models\PaymentConfiguration;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Notifications\PaymentReceivedNotification;
-use App\Services\BookingShadowCampaignService;
-use App\Services\ExchangeRateService;
-use App\Services\GuestAccountCreationService;
+use App\Services\PaymentCompletionService;
 use App\Services\PaymentProviderInterface;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -26,7 +19,7 @@ class PaystackPaymentProvider implements PaymentProviderInterface
 
     protected string $secretKey;
 
-    public function __construct()
+    public function __construct(protected PaymentCompletionService $paymentCompletionService)
     {
         $this->baseUrl = 'https://api.paystack.co';
         $this->secretKey = (string) config('services.paystack.secret_key');
@@ -187,12 +180,12 @@ class PaystackPaymentProvider implements PaymentProviderInterface
 
             $paidAmount = $this->convertFromSmallestUnit((int) $verificationData['amount'], (string) $payment->currency);
             $localBreakdown = $this->buildLocalBreakdown($payment, $verificationData, $paidAmount);
-            $conversion = $this->normalizeUsdConversion(
-                $this->resolveUsdConversion($payment, $paidAmount, $paymentReference),
+            $conversion = $this->paymentCompletionService->normalizeUsdConversion(
+                $this->paymentCompletionService->resolveUsdConversion($payment, $paidAmount, $paymentReference),
                 $paidAmount
             );
 
-            $payment->update([
+            $paymentUpdate = [
                 'provider_transaction_id' => $verificationData['id'],
                 'status' => 'completed',
                 'paid_at' => now(),
@@ -203,7 +196,10 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 'exchange_rate_fetched_at' => $conversion['fetched_at'],
                 'amount_breakdown' => [
                     'local' => $localBreakdown,
-                    'usd' => $this->convertBreakdownToUsd($localBreakdown, (float) ($conversion['exchange_rate_to_usd'] ?? 0)),
+                    'usd' => $this->paymentCompletionService->convertBreakdownToUsd(
+                        $localBreakdown,
+                        (float) ($conversion['exchange_rate_to_usd'] ?? 0)
+                    ),
                 ],
                 'provider_data' => array_merge(
                     $payment->provider_data ?? [],
@@ -212,38 +208,11 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                         'verified_at' => now()->toISOString(),
                     ]
                 ),
-            ]);
+            ];
 
-            $booking = $payment->booking;
-
-            if (! $booking) {
-                return;
-            }
-
-            $booking->update(['status' => BookingStatus::CONFIRMED]);
-
-            if ($booking->slot) {
-                $booking->slot->update([
-                    'status' => SlotStatus::Booked,
-                    'reserved_until' => null,
-                ]);
-            }
-
-            if ($booking->isMarketplaceApplication() && $booking->campaignSlot) {
-                $booking->campaignSlot->update([
-                    'status' => CampaignSlotStatus::Active,
-                ]);
-            }
-
-            $this->handleGuestAccountCreation($booking);
-            app(BookingShadowCampaignService::class)->activateForPaidInquiry($booking->fresh());
-            $this->notifyCreatorPaymentReceived($booking, $payment);
-
-            Log::info('Paystack payment confirmed for booking', [
-                'booking_id' => $payment->booking_id,
+            $this->paymentCompletionService->finalizePayment($payment, $paymentUpdate, [
                 'reference' => $paymentReference,
                 'transaction_id' => $verificationData['id'],
-                'payment_id' => $payment->id,
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to handle successful Paystack payment', [
@@ -699,64 +668,6 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         return round(max(0, min(100, (float) $percentage)), 4);
     }
 
-    protected function resolveUsdConversion(BookingPayment $payment, float $paidAmount, string $reference): array
-    {
-        if (strtoupper((string) $payment->currency) === 'USD') {
-            return [
-                'amount_usd' => $paidAmount,
-                'exchange_rate_to_usd' => 1.0,
-                'provider' => 'identity',
-                'fetched_at' => now(),
-            ];
-        }
-
-        $storedRate = (float) ($payment->exchange_rate_to_usd ?? 0);
-
-        if ($storedRate > 0) {
-            return [
-                'amount_usd' => round($paidAmount * $storedRate, 2),
-                'exchange_rate_to_usd' => $storedRate,
-                'provider' => $payment->exchange_rate_provider,
-                'fetched_at' => $payment->exchange_rate_fetched_at,
-            ];
-        }
-
-        try {
-            return app(ExchangeRateService::class)->convertToUsd($paidAmount, (string) $payment->currency);
-        } catch (\Throwable $exception) {
-            Log::warning('Unable to convert Paystack payment amount to USD via configured provider', [
-                'payment_id' => $payment->id,
-                'reference' => $reference,
-                'currency' => $payment->currency,
-                'error' => $exception->getMessage(),
-            ]);
-        }
-
-        $fallbackRate = ExchangeRate::query()
-            ->where('base_currency', strtoupper((string) $payment->currency))
-            ->where('target_currency', 'USD')
-            ->latest('fetched_at')
-            ->first();
-
-        if ($fallbackRate && (float) $fallbackRate->rate > 0) {
-            $rate = (float) $fallbackRate->rate;
-
-            return [
-                'amount_usd' => round($paidAmount * $rate, 2),
-                'exchange_rate_to_usd' => $rate,
-                'provider' => $fallbackRate->provider,
-                'fetched_at' => $fallbackRate->fetched_at,
-            ];
-        }
-
-        return [
-            'amount_usd' => $payment->amount_usd,
-            'exchange_rate_to_usd' => $payment->exchange_rate_to_usd,
-            'provider' => $payment->exchange_rate_provider,
-            'fetched_at' => $payment->exchange_rate_fetched_at,
-        ];
-    }
-
     protected function createTransferRecipient(PaymentConfiguration $config, string $currency): string
     {
         $providerData = $config->provider_data;
@@ -872,34 +783,6 @@ class PaystackPaymentProvider implements PaymentProviderInterface
         };
     }
 
-    protected function convertBreakdownToUsd(array $localBreakdown, float $exchangeRateToUsd): array
-    {
-        $numericKeys = [
-            'gross_amount',
-            'platform_fee_amount',
-            'processor_fee_amount',
-            'escrow_amount',
-            'creator_payout_amount',
-            'requested_amount',
-        ];
-
-        $usdBreakdown = ['currency' => 'USD'];
-
-        foreach ($numericKeys as $key) {
-            $value = data_get($localBreakdown, $key);
-
-            if ($value === null || ! is_numeric($value) || $exchangeRateToUsd <= 0) {
-                $usdBreakdown[$key] = null;
-
-                continue;
-            }
-
-            $usdBreakdown[$key] = round((float) $value * $exchangeRateToUsd, 2);
-        }
-
-        return $usdBreakdown;
-    }
-
     protected function convertToSmallestUnit(float $amount, string $currency): int
     {
         return (int) ($amount * 100);
@@ -1002,54 +885,5 @@ class PaystackPaymentProvider implements PaymentProviderInterface
                 ? $this->convertFromSmallestUnit((int) $transactionData['requested_amount'], (string) $payment->currency)
                 : null,
         ];
-    }
-
-    private function normalizeUsdConversion(array $conversion, float $paidAmount): array
-    {
-        $effectiveRate = (float) ($conversion['exchange_rate_to_usd'] ?? 0);
-        $amountUsd = $conversion['amount_usd'] ?? null;
-
-        if ($effectiveRate <= 0 && is_numeric($amountUsd) && $paidAmount > 0) {
-            $effectiveRate = round(((float) $amountUsd) / $paidAmount, 10);
-            $conversion['exchange_rate_to_usd'] = $effectiveRate;
-        }
-
-        if (! is_numeric($amountUsd) && $effectiveRate > 0) {
-            $conversion['amount_usd'] = round($paidAmount * $effectiveRate, 2);
-        }
-
-        return $conversion;
-    }
-
-    private function notifyCreatorPaymentReceived(Booking $booking, BookingPayment $payment): void
-    {
-        if (! $booking->creator) {
-            return;
-        }
-
-        try {
-            $booking->creator->notify(new PaymentReceivedNotification($booking));
-        } catch (\Throwable $exception) {
-            Log::warning('Failed to dispatch creator payment notification', [
-                'booking_id' => $payment->booking_id,
-                'payment_id' => $payment->id,
-                'error' => $exception->getMessage(),
-            ]);
-        }
-    }
-
-    protected function handleGuestAccountCreation(Booking $booking): void
-    {
-        try {
-            if (! $booking->brand_user_id && $booking->guest_email && $booking->guest_name) {
-                $guestAccountService = app(GuestAccountCreationService::class);
-                $guestAccountService->createAccountForGuest($booking);
-            }
-        } catch (\Exception $e) {
-            Log::error('Failed to handle guest account creation', [
-                'booking_id' => $booking->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
     }
 }

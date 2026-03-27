@@ -2,11 +2,11 @@
 
 namespace App\Services\Providers;
 
-use App\Enums\BookingStatus;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\PaymentConfiguration;
 use App\Models\Workspace;
+use App\Services\PaymentCompletionService;
 use App\Services\PaymentProviderInterface;
 use Illuminate\Support\Facades\Log;
 use Stripe\Account;
@@ -25,7 +25,7 @@ class StripePaymentProvider implements PaymentProviderInterface
         'FR' => ['name' => 'France', 'default_currency_code' => 'EUR', 'currencies' => ['EUR']],
     ];
 
-    public function __construct()
+    public function __construct(protected PaymentCompletionService $paymentCompletionService)
     {
         Stripe::setApiKey(config('cashier.secret'));
     }
@@ -132,7 +132,11 @@ class StripePaymentProvider implements PaymentProviderInterface
                 return;
             }
 
-            $payment = BookingPayment::findBySessionId('stripe', $paymentReference);
+            $payment = BookingPayment::query()
+                ->with(['booking.slot', 'booking.product', 'booking.creator', 'booking.campaignSlot'])
+                ->where('provider', 'stripe')
+                ->where('session_id', $paymentReference)
+                ->first();
 
             if (! $payment) {
                 Log::error('Payment record not found for Stripe session', [
@@ -142,24 +146,46 @@ class StripePaymentProvider implements PaymentProviderInterface
                 return;
             }
 
-            $payment->update([
+            $currency = strtoupper((string) ($session->currency ?? $payment->currency ?? 'USD'));
+            $amountTotal = (int) ($session->amount_total ?? 0);
+            $paidAmount = $amountTotal > 0
+                ? $this->convertFromSmallestUnit($amountTotal, $currency)
+                : (float) $payment->amount;
+            $localBreakdown = $this->buildLocalBreakdown($payment, $paidAmount, $currency);
+            $conversion = $this->paymentCompletionService->normalizeUsdConversion(
+                $this->paymentCompletionService->resolveUsdConversion($payment, $paidAmount, $paymentReference),
+                $paidAmount
+            );
+
+            $paymentUpdate = [
                 'provider_transaction_id' => $session->payment_intent,
                 'status' => 'completed',
                 'paid_at' => now(),
+                'amount' => $paidAmount,
+                'amount_usd' => $conversion['amount_usd'],
+                'exchange_rate_to_usd' => $conversion['exchange_rate_to_usd'],
+                'exchange_rate_provider' => $conversion['provider'],
+                'exchange_rate_fetched_at' => $conversion['fetched_at'],
+                'amount_breakdown' => [
+                    'local' => $localBreakdown,
+                    'usd' => $this->paymentCompletionService->convertBreakdownToUsd(
+                        $localBreakdown,
+                        (float) ($conversion['exchange_rate_to_usd'] ?? 0)
+                    ),
+                ],
                 'provider_data' => array_merge(
                     $payment->provider_data ?? [],
-                    ['payment_intent' => $session->payment_intent]
+                    [
+                        'payment_intent' => $session->payment_intent,
+                        'session_data' => $session->toArray(),
+                        'verified_at' => now()->toISOString(),
+                    ]
                 ),
-            ]);
+            ];
 
-            $payment->booking->update([
-                'status' => BookingStatus::CONFIRMED,
-            ]);
-
-            Log::info('Stripe payment confirmed for booking', [
-                'booking_id' => $payment->booking_id,
+            $this->paymentCompletionService->finalizePayment($payment, $paymentUpdate, [
                 'session_id' => $paymentReference,
-                'payment_id' => $payment->id,
+                'payment_intent' => $session->payment_intent,
             ]);
         } catch (ApiErrorException $e) {
             Log::error('Failed to handle successful Stripe payment', [
@@ -307,6 +333,36 @@ class StripePaymentProvider implements PaymentProviderInterface
         }
 
         return (int) ($amount * 100);
+    }
+
+    protected function convertFromSmallestUnit(int $amount, string $currency): float
+    {
+        $zeroDecimalCurrencies = ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
+
+        if (in_array(strtoupper($currency), $zeroDecimalCurrencies, true)) {
+            return (float) $amount;
+        }
+
+        return $amount / 100;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildLocalBreakdown(BookingPayment $payment, float $paidAmount, string $currency): array
+    {
+        $platformFeeAmount = (float) data_get($payment->provider_data, 'platform_fee_amount', 0);
+        $escrowAmount = max(round($paidAmount - $platformFeeAmount, 2), 0);
+
+        return [
+            'currency' => $currency,
+            'gross_amount' => $paidAmount,
+            'platform_fee_amount' => $platformFeeAmount,
+            'processor_fee_amount' => null,
+            'escrow_amount' => $escrowAmount,
+            'creator_payout_amount' => $escrowAmount,
+            'requested_amount' => null,
+        ];
     }
 
     protected function mapToStripeCountry(string $countryCode): string

@@ -10,7 +10,7 @@ use App\Services\Providers\StripePaymentProvider;
 
 class PaymentService
 {
-    private const string ACTIVE_PROVIDER = 'paystack';
+    private const string ACTIVE_PROVIDER = 'stripe';
 
     /**
      * @var array<string, class-string<PaymentProviderInterface>>
@@ -28,7 +28,7 @@ class PaymentService
     public function createCheckoutSession(Booking $booking, string $brandCountry = 'global'): array
     {
         $workspace = $booking->product->workspace;
-        $paymentConfig = $this->resolveActivePaymentConfiguration($workspace, self::ACTIVE_PROVIDER);
+        $paymentConfig = $this->resolveCheckoutPaymentConfiguration($workspace);
         $provider = $this->resolveProviderFromConfig($paymentConfig);
 
         return $provider->createCheckoutSession($booking, $paymentConfig);
@@ -79,7 +79,7 @@ class PaymentService
 
     public function getAvailableProviders(): array
     {
-        return [self::ACTIVE_PROVIDER];
+        return array_keys($this->providers);
     }
 
     public function getSupportedCountries(string $provider = self::ACTIVE_PROVIDER): array
@@ -145,8 +145,6 @@ class PaymentService
 
     private function resolveProviderByName(string $provider): PaymentProviderInterface
     {
-        $this->ensureProviderAllowed($provider);
-
         if (! isset($this->providers[$provider])) {
             throw new \Exception("Payment provider '{$provider}' not supported");
         }
@@ -156,12 +154,7 @@ class PaymentService
         return app($providerClass);
     }
 
-    private function ensureProviderAllowed(string $provider): void
-    {
-        if ($provider !== self::ACTIVE_PROVIDER) {
-            throw new \Exception("Provider '{$provider}' is currently disabled. Active provider: ".self::ACTIVE_PROVIDER);
-        }
-    }
+    private function ensureProviderAllowed(string $provider): void {}
 
     private function assertWorkspaceSupportsProvider(Workspace $workspace, string $provider): void
     {
@@ -179,6 +172,21 @@ class PaymentService
         }
 
         return $paymentConfig;
+    }
+
+    private function resolveCheckoutPaymentConfiguration(Workspace $workspace): PaymentConfiguration
+    {
+        $config = $workspace->activePaymentConfiguration('stripe');
+
+        if (! $config) {
+            $config = $workspace->activePaymentConfiguration('paystack');
+        }
+
+        if (! $config) {
+            throw new \Exception("No active payment configuration found for workspace: {$workspace->name}");
+        }
+
+        return $config;
     }
 
     private function resolveLatestBookingPayment(Booking $booking): BookingPayment

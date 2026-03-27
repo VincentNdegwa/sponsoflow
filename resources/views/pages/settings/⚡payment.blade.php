@@ -1,24 +1,18 @@
 <?php
 
-use App\Livewire\Concerns\HandlesPaystackPaymentSetup;
+use App\Livewire\Concerns\HandlesStripePaymentSetup;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Payment settings')] class extends Component {
-    use HandlesPaystackPaymentSetup;
+    use HandlesStripePaymentSetup;
 
     public bool $showForm = true;
 
     public function mount(): void
     {
-        $workspace = $this->getCurrentWorkspace();
-
-        if ($workspace && method_exists($workspace, 'getRecommendedProvider')) {
-            $this->provider = $workspace->getRecommendedProvider();
-        }
-
-        $this->initializePaystackPaymentSetup();
+        $this->initializeStripePaymentSetup();
         $this->showForm = ! $this->storedPaymentConfiguration;
         $this->bypassExistingPaymentAccount = $this->showForm;
     }
@@ -46,26 +40,6 @@ new #[Title('Payment settings')] class extends Component {
     {
         $this->showForm = true;
         $this->bypassExistingPaymentAccount = false;
-    }
-
-    #[Computed]
-    public function storedPaymentConfiguration()
-    {
-        $workspace = $this->getCurrentWorkspace();
-
-        if (! $workspace) {
-            return null;
-        }
-
-        return $workspace->paymentConfigurations()
-            ->where('provider', $this->provider)
-            ->first();
-    }
-
-    #[Computed]
-    public function isPaystackVerified(): bool
-    {
-        return $this->storedPaymentConfiguration && $this->storedPaymentConfiguration->is_verified;
     }
 
     #[Computed]
@@ -102,8 +76,8 @@ new #[Title('Payment settings')] class extends Component {
                         <div>
                             <flux:heading size="lg">{{ ucfirst($this->recommendedProvider) }} Account</flux:heading>
                             <flux:subheading class="mt-1">
-                                Status: 
-                                @if($this->isPaystackVerified)
+                                Status:
+                                @if($this->isStripeVerified)
                                     <flux:badge color="green" size="sm">Verified & Active</flux:badge>
                                 @else
                                     <flux:badge color="amber" size="sm">Pending Verification</flux:badge>
@@ -120,7 +94,7 @@ new #[Title('Payment settings')] class extends Component {
                         </div>
                     </div>
 
-                    @if($this->isPaystackVerified)
+                    @if($this->isStripeVerified)
                         <div class="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
                             <div class="flex">
                                 <flux:icon.check-circle class="w-5 h-5 text-green-400 mt-0.5" />
@@ -162,7 +136,7 @@ new #[Title('Payment settings')] class extends Component {
                                 Your security is important to us
                             </flux:text>
                             <flux:text size="sm" class="text-gray-600 mt-1">
-                                Your bank details are only used for verification with {{ ucfirst($this->recommendedProvider) }} and are not stored on our servers. We only save the secure account reference provided by {{ ucfirst($this->recommendedProvider) }}.
+                                Stripe collects your payout details securely during onboarding. We only save the account reference that Stripe returns to us.
                             </flux:text>
                         </div>
                     </div>
