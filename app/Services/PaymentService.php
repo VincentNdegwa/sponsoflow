@@ -10,7 +10,7 @@ use App\Services\Providers\StripePaymentProvider;
 
 class PaymentService
 {
-    private const string ACTIVE_PROVIDER = 'stripe';
+    private const  ACTIVE_PROVIDER = 'stripe';
 
     /**
      * @var array<string, class-string<PaymentProviderInterface>>
