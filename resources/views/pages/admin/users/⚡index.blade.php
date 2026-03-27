@@ -94,6 +94,12 @@ new #[Layout('layouts::admin'), Title('Users')] class extends Component {
                                 <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
                                 <flux:menu>
                                     <flux:menu.item :href="route('admin.users.show', $user)" icon="eye">View</flux:menu.item>
+                                    <form method="POST" action="{{ route('admin.users.impersonate', $user) }}">
+                                        @csrf
+                                        <flux:menu.item as="button" type="submit" icon="user">
+                                            {{ __('Impersonate') }}
+                                        </flux:menu.item>
+                                    </form>
                                 </flux:menu>
                             </flux:dropdown>
                         </flux:table.cell>

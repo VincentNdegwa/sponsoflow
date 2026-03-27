@@ -56,9 +56,17 @@ new #[Layout('layouts::admin'), Title('User Details')] class extends Component {
                 <flux:subheading>{{ $user->email }}</flux:subheading>
             </div>
 
-            <flux:button href="{{ route('admin.users') }}" variant="ghost" icon="arrow-left">
-                {{ __('Back to Users') }}
-            </flux:button>
+            <div class="flex items-center gap-2">
+                <form method="POST" action="{{ route('admin.users.impersonate', $user) }}">
+                    @csrf
+                    <flux:button type="submit" variant="primary" icon="user">
+                        {{ __('Impersonate') }}
+                    </flux:button>
+                </form>
+                <flux:button href="{{ route('admin.users') }}" variant="ghost" icon="arrow-left">
+                    {{ __('Back to Users') }}
+                </flux:button>
+            </div>
         </div>
     </div>
 

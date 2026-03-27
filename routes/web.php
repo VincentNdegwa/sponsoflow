@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminAuthenticatedSessionController;
+use App\Http\Controllers\Admin\AdminImpersonationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\StripeConnectController;
@@ -49,8 +50,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware(['admin.access'])->group(function () {
         Route::post('/logout', [AdminAuthenticatedSessionController::class, 'destroy'])->name('logout');
         Route::livewire('/', 'pages::admin.dashboard')->name('dashboard');
-        Route::livewire('/users', 'pages::admin.users')->name('users');
+        Route::livewire('/users', 'pages::admin.users.index')->name('users');
         Route::livewire('/users/{user}', 'pages::admin.users.show')->name('users.show');
+        Route::post('/users/{user}/impersonate', [AdminImpersonationController::class, 'store'])->name('users.impersonate');
+        Route::post('/impersonation/stop', [AdminImpersonationController::class, 'destroy'])->name('impersonation.stop');
     });
 });
 
